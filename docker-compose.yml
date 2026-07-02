@@ -1,0 +1,10 @@
+services:
+  fhos-backend:
+    build:
+      context: ./backend
+    container_name: fhos-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./database:/app/database

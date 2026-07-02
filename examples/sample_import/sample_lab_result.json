@@ -1,0 +1,11 @@
+{
+  "owner_id": 1,
+  "test_name_uk": "Глюкоза натще",
+  "test_name_original": "Glucose fasting",
+  "value": 5.4,
+  "unit": "ммоль/л",
+  "reference_range": "3.9–5.5",
+  "lab_name": "Приклад лабораторії",
+  "result_date": "2026-06-29",
+  "notes": "Тестовий запис для перевірки API"
+}
