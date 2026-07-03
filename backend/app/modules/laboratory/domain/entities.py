@@ -140,3 +140,55 @@ class LaboratoryResult:
             return TrendDirection.STABLE
 
         return TrendDirection.UP if change_percent > 0 else TrendDirection.DOWN
+
+    def abnormality_score(self) -> float | None:
+        """Severity одного лабораторного показника — НЕ клінічний ризик хвороби.
+
+        Це "Single Result Risk" рівень (перший з трьох запланованих рівнів
+        оцінки ризику FHOS: Single Result -> Trend -> Composite Clinical).
+        Composite Clinical Risk (комбінація кількох показників з контекстом
+        пацієнта) — окремий майбутній Risk Engine, не метод цього класу.
+
+        Повертає:
+            None — недостатньо даних (немає value/reference range).
+            0.0  — значення в межах норми.
+            0.25 — легке відхилення (|deviation| <= 10%).
+            0.5  — помірне відхилення (10% < |deviation| <= 30%).
+            0.75 — значне відхилення (30% < |deviation| <= 50%).
+            1.0  — критичне/дуже велике відхилення (|deviation| > 50%).
+
+        Примітка: поріг is_critical() (за замовчуванням 30%) НЕ співпадає з
+        верхнім порогом цієї шкали (50%) навмисно — is_critical()/interpret()
+        дають бінарну клінічну позначку, а abnormality_score() — тонший
+        градієнт важкості для UI/сортування/пріоритизації.
+        """
+        deviation = self.deviation_percent()
+        if deviation is None:
+            return None
+
+        abs_deviation = abs(deviation)
+
+        if abs_deviation == 0:
+            return 0.0
+        if abs_deviation <= 10:
+            return 0.25
+        if abs_deviation <= 30:
+            return 0.5
+        if abs_deviation <= 50:
+            return 0.75
+        return 1.0
+
+    def risk_score(self) -> float | None:
+        """Alias для abnormality_score() — існує тому, що Constitution v3.0
+        прямо перелічує risk_score() серед обов'язкових методів LaboratoryResult.
+
+        Назва "risk_score" звучить як клінічний прогноз ризику захворювання,
+        яким цей метод НЕ є. Використовуй abnormality_score() у новому коді —
+        ця назва чесніше описує, що метод оцінює лише важкість відхилення
+        одного показника від референсного діапазону, без клінічного висновку.
+
+        risk_score() лишається як сумісний з Constitution псевдонім до моменту,
+        коли Constitution буде явно оновлено, або поки composite clinical risk
+        engine не потребуватиме цієї назви для чогось іншого.
+        """
+        return self.abnormality_score()
