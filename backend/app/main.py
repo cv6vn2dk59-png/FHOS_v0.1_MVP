@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import app.persistence.model_registry  # noqa: F401 — реєструє всі ORM/Repository до першого запиту
 from app.api.router import api_router
 from app.core.config import get_settings
 

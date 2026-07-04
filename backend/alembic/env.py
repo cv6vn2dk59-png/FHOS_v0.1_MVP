@@ -12,7 +12,7 @@ sys.path.append(str(BASE_DIR))
 
 from app.core.config import get_settings
 from app.persistence import Base
-import app.persistence  # noqa: F401
+import app.persistence.model_registry  # noqa: F401
 
 
 config = context.config
