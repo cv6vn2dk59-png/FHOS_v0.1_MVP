@@ -16,6 +16,12 @@ class LaboratoryInterpretationORM(str, enum.Enum):
     UNKNOWN = "unknown"
 
 
+class ReferenceRangeStatusORM(str, enum.Enum):
+    MANUAL = "manual"
+    RESOLVED = "resolved"
+    NOT_FOUND = "not_found"
+
+
 class LaboratoryResultORM(Base):
     __tablename__ = "laboratory_results"
 
@@ -42,15 +48,24 @@ class LaboratoryResultORM(Base):
     laboratory_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     interpretation: Mapped[LaboratoryInterpretationORM] = mapped_column(
-    SAEnum(
-        LaboratoryInterpretationORM,
-        name="laboratory_interpretation",
-        values_callable=lambda enum_cls: [member.value for member in enum_cls],
-    ),
-    default=LaboratoryInterpretationORM.UNKNOWN,
-    nullable=False,
-    index=True,
-)
+        SAEnum(
+            LaboratoryInterpretationORM,
+            name="laboratory_interpretation",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        default=LaboratoryInterpretationORM.UNKNOWN,
+        nullable=False,
+        index=True,
+    )
+
+    reference_range_status: Mapped[ReferenceRangeStatusORM | None] = mapped_column(
+        SAEnum(
+            ReferenceRangeStatusORM,
+            name="reference_range_status",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=True,
+    )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

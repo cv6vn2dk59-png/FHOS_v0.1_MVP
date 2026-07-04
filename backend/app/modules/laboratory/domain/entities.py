@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
@@ -21,6 +21,12 @@ class TrendDirection(str, enum.Enum):
     INSUFFICIENT_DATA = "insufficient_data"
 
 
+class ReferenceRangeStatus(str, enum.Enum):
+    MANUAL = "manual"
+    RESOLVED = "resolved"
+    NOT_FOUND = "not_found"
+
+
 @dataclass
 class LaboratoryResult:
     test_name: str
@@ -36,6 +42,7 @@ class LaboratoryResult:
     laboratory_name: str | None = None
     notes: str | None = None
     interpretation: LaboratoryInterpretation = LaboratoryInterpretation.UNKNOWN
+    reference_range_status: ReferenceRangeStatus | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -46,8 +53,8 @@ class LaboratoryResult:
         if self.reference_min is not None and self.reference_max is not None:
             if self.reference_min > self.reference_max:
                 raise ValueError(
-                    f"reference_min ({self.reference_min}) не може бути більшим за "
-                    f"reference_max ({self.reference_max}) для тесту {self.test_name!r}"
+                    f"reference_min ({self.reference_min}) not valid vs "
+                    f"reference_max ({self.reference_max}) for {self.test_name!r}"
                 )
 
     def has_reference_range(self) -> bool:
@@ -56,21 +63,15 @@ class LaboratoryResult:
     def is_out_of_range(self) -> bool:
         if self.value is None or not self.has_reference_range():
             return False
-        return self.value < self.reference_min or self.value > self.reference_max  # type: ignore[operator]
+        return self.value < self.reference_min or self.value > self.reference_max
 
     def deviation_percent(self) -> float | None:
-        """Відхилення value від найближчої порушеної межі, у відсотках.
-
-        0.0  — значення в межах норми.
-        None — недостатньо даних для розрахунку (немає value/reference range,
-               або межа дорівнює 0 — відсоток від нуля не визначений).
-        """
         if self.value is None or not self.has_reference_range():
             return None
 
-        if self.value < self.reference_min:  # type: ignore[operator]
+        if self.value < self.reference_min:
             boundary = self.reference_min
-        elif self.value > self.reference_max:  # type: ignore[operator]
+        elif self.value > self.reference_max:
             boundary = self.reference_max
         else:
             return 0.0
@@ -78,7 +79,7 @@ class LaboratoryResult:
         if boundary == 0:
             return None
 
-        return round((self.value - boundary) / abs(boundary) * 100, 2)  # type: ignore[operator]
+        return round((self.value - boundary) / abs(boundary) * 100, 2)
 
     def is_critical(self) -> bool:
         deviation = self.deviation_percent()
@@ -87,7 +88,6 @@ class LaboratoryResult:
         return abs(deviation) >= self.critical_threshold_percent
 
     def interpret(self) -> LaboratoryInterpretation:
-        """Обчислює й записує interpretation. Єдина точка істини для статусу результату."""
         if self.value is None or not self.has_reference_range():
             self.interpretation = LaboratoryInterpretation.UNKNOWN
             return self.interpretation
@@ -96,7 +96,7 @@ class LaboratoryResult:
             self.interpretation = LaboratoryInterpretation.NORMAL
             return self.interpretation
 
-        is_low = self.value < self.reference_min  # type: ignore[operator]
+        is_low = self.value < self.reference_min
 
         if self.is_critical():
             self.interpretation = (
@@ -108,12 +108,6 @@ class LaboratoryResult:
         return self.interpretation
 
     def trend(self, previous_results: list["LaboratoryResult"]) -> TrendDirection:
-        """Порівнює self з найновішим попереднім результатом того самого test_code.
-
-        previous_results не обов'язково відсортований і може містити інші тести —
-        метод сам фільтрує за test_code і бере найпізніший за result_date, що
-        передує self.result_date.
-        """
         if self.value is None or self.result_date is None or self.test_code is None:
             return TrendDirection.INSUFFICIENT_DATA
 
@@ -129,12 +123,12 @@ class LaboratoryResult:
         if not comparable:
             return TrendDirection.INSUFFICIENT_DATA
 
-        last = max(comparable, key=lambda r: r.result_date)  # type: ignore[arg-type,return-value]
+        last = max(comparable, key=lambda r: r.result_date)
 
         if last.value == 0:
             return TrendDirection.INSUFFICIENT_DATA
 
-        change_percent = (self.value - last.value) / abs(last.value) * 100  # type: ignore[operator]
+        change_percent = (self.value - last.value) / abs(last.value) * 100
 
         if abs(change_percent) < self.stable_threshold_percent:
             return TrendDirection.STABLE
@@ -142,26 +136,6 @@ class LaboratoryResult:
         return TrendDirection.UP if change_percent > 0 else TrendDirection.DOWN
 
     def abnormality_score(self) -> float | None:
-        """Severity одного лабораторного показника — НЕ клінічний ризик хвороби.
-
-        Це "Single Result Risk" рівень (перший з трьох запланованих рівнів
-        оцінки ризику FHOS: Single Result -> Trend -> Composite Clinical).
-        Composite Clinical Risk (комбінація кількох показників з контекстом
-        пацієнта) — окремий майбутній Risk Engine, не метод цього класу.
-
-        Повертає:
-            None — недостатньо даних (немає value/reference range).
-            0.0  — значення в межах норми.
-            0.25 — легке відхилення (|deviation| <= 10%).
-            0.5  — помірне відхилення (10% < |deviation| <= 30%).
-            0.75 — значне відхилення (30% < |deviation| <= 50%).
-            1.0  — критичне/дуже велике відхилення (|deviation| > 50%).
-
-        Примітка: поріг is_critical() (за замовчуванням 30%) НЕ співпадає з
-        верхнім порогом цієї шкали (50%) навмисно — is_critical()/interpret()
-        дають бінарну клінічну позначку, а abnormality_score() — тонший
-        градієнт важкості для UI/сортування/пріоритизації.
-        """
         deviation = self.deviation_percent()
         if deviation is None:
             return None
@@ -179,16 +153,6 @@ class LaboratoryResult:
         return 1.0
 
     def risk_score(self) -> float | None:
-        """Alias для abnormality_score() — існує тому, що Constitution v3.0
-        прямо перелічує risk_score() серед обов'язкових методів LaboratoryResult.
-
-        Назва "risk_score" звучить як клінічний прогноз ризику захворювання,
-        яким цей метод НЕ є. Використовуй abnormality_score() у новому коді —
-        ця назва чесніше описує, що метод оцінює лише важкість відхилення
-        одного показника від референсного діапазону, без клінічного висновку.
-
-        risk_score() лишається як сумісний з Constitution псевдонім до моменту,
-        коли Constitution буде явно оновлено, або поки composite clinical risk
-        engine не потребуватиме цієї назви для чогось іншого.
-        """
+        """Compatibility alias for Constitution v3.0. Remove after
+        Constitution v3.1 is explicitly Approved."""
         return self.abnormality_score()

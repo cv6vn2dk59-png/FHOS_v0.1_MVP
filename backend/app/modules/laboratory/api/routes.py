@@ -12,6 +12,8 @@ from app.modules.laboratory.schemas.laboratory import (
     LaboratoryResultRead,
     LaboratoryTrendRead,
 )
+from app.modules.profile.application.service import ProfileService
+from app.shared.dates import calculate_age
 
 
 router = APIRouter(prefix="/laboratory", tags=["Laboratory"])
@@ -22,9 +24,19 @@ def create_result(
     data: LaboratoryResultCreate,
     uow: UnitOfWork = Depends(get_uow),
 ):
+    sex: str | None = None
+    age: int | None = None
+
+    if data.patient_profile_id is not None:
+        profile = ProfileService(uow).get_profile(data.patient_profile_id)
+        if profile is not None:
+            sex = profile.sex
+            if profile.birth_date is not None:
+                age = calculate_age(profile.birth_date)
+
     service = LaboratoryService(uow)
     try:
-        return service.create_result(data)
+        return service.create_result(data, sex=sex, age=age)
     except InvalidPatientReferenceError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

@@ -24,3 +24,6 @@ class ProfileService:
 
     def list_profiles(self) -> list[PatientProfileORM]:
         return self.uow.repo(PatientProfileORM).list()
+
+    def get_profile(self, profile_id: int) -> PatientProfileORM | None:
+        return self.uow.repo(PatientProfileORM).get(profile_id)

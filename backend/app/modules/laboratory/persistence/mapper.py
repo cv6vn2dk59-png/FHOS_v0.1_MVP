@@ -1,5 +1,13 @@
-from app.modules.laboratory.domain.entities import LaboratoryInterpretation, LaboratoryResult
-from app.modules.laboratory.persistence.orm import LaboratoryInterpretationORM, LaboratoryResultORM
+from app.modules.laboratory.domain.entities import (
+    LaboratoryInterpretation,
+    LaboratoryResult,
+    ReferenceRangeStatus,
+)
+from app.modules.laboratory.persistence.orm import (
+    LaboratoryInterpretationORM,
+    LaboratoryResultORM,
+    ReferenceRangeStatusORM,
+)
 
 
 def to_domain(orm: LaboratoryResultORM) -> LaboratoryResult:
@@ -17,6 +25,11 @@ def to_domain(orm: LaboratoryResultORM) -> LaboratoryResult:
         laboratory_name=orm.laboratory_name,
         notes=orm.notes,
         interpretation=LaboratoryInterpretation(orm.interpretation.value),
+        reference_range_status=(
+            ReferenceRangeStatus(orm.reference_range_status.value)
+            if orm.reference_range_status is not None
+            else None
+        ),
         created_at=orm.created_at,
         updated_at=orm.updated_at,
     )
@@ -36,4 +49,9 @@ def to_orm(domain: LaboratoryResult) -> LaboratoryResultORM:
         laboratory_name=domain.laboratory_name,
         notes=domain.notes,
         interpretation=LaboratoryInterpretationORM(domain.interpretation.value),
+        reference_range_status=(
+            ReferenceRangeStatusORM(domain.reference_range_status.value)
+            if domain.reference_range_status is not None
+            else None
+        ),
     )

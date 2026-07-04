@@ -2,7 +2,11 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.modules.laboratory.domain.entities import LaboratoryInterpretation, TrendDirection
+from app.modules.laboratory.domain.entities import (
+    LaboratoryInterpretation,
+    ReferenceRangeStatus,
+    TrendDirection,
+)
 
 
 class LaboratoryResultCreate(BaseModel):
@@ -42,6 +46,7 @@ class LaboratoryResultRead(BaseModel):
     laboratory_name: str | None
     notes: str | None
     interpretation: LaboratoryInterpretation
+    reference_range_status: ReferenceRangeStatus | None
     created_at: datetime
     updated_at: datetime
 

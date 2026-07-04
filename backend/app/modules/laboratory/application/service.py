@@ -1,7 +1,12 @@
 ﻿from sqlalchemy.exc import IntegrityError
 
 from app.application.uow import UnitOfWork
-from app.modules.laboratory.domain.entities import LaboratoryResult, TrendDirection
+from app.modules.laboratory.application.reference_range_resolver import ReferenceRangeResolver
+from app.modules.laboratory.domain.entities import (
+    LaboratoryResult,
+    ReferenceRangeStatus,
+    TrendDirection,
+)
 from app.modules.laboratory.persistence import mapper
 from app.modules.laboratory.persistence.orm import LaboratoryResultORM
 from app.modules.laboratory.schemas.laboratory import LaboratoryResultCreate
@@ -23,19 +28,64 @@ class LaboratoryService:
     def __init__(self, uow: UnitOfWork):
         self.uow = uow
 
-    def create_result(self, data: LaboratoryResultCreate) -> LaboratoryResult:
+    def create_result(
+        self,
+        data: LaboratoryResultCreate,
+        sex: str | None = None,
+        age: int | None = None,
+    ) -> LaboratoryResult:
+        """Створює лабораторний результат.
+
+        Якщо reference_min/reference_max передані явно в data — вони
+        мають абсолютний пріоритет (ReferenceRangeStatus.MANUAL), Resolver
+        НЕ викликається і не може мовчки перезаписати ручне введення.
+
+        Якщо не передані — намагається знайти підходящий діапазон через
+        ReferenceRangeResolver, використовуючи sex/age як примітивний
+        контекст пацієнта (Application Layer, що викликає цей метод,
+        відповідає за те, щоб дістати ці примітиви з Profile — Laboratory
+        сам ніколи не звертається до PatientProfileORM).
+
+        Якщо резолвер нічого не знайшов (або test_code/unit відсутні,
+        роблячи пошук неможливим) — ReferenceRangeStatus.NOT_FOUND,
+        результат лишається з reference_min/max = None (не вигадуємо дані).
+        """
+        reference_min = data.reference_min
+        reference_max = data.reference_max
+
+        if reference_min is not None and reference_max is not None:
+            reference_range_status = ReferenceRangeStatus.MANUAL
+        elif data.test_code is not None and data.unit is not None:
+            resolver = ReferenceRangeResolver(self.uow)
+            resolved = resolver.resolve(
+                test_code=data.test_code,
+                unit=data.unit,
+                sex=sex,
+                age=age,
+                laboratory_name=data.laboratory_name,
+            )
+            if resolved is not None:
+                reference_min = resolved.reference_min
+                reference_max = resolved.reference_max
+                reference_range_status = ReferenceRangeStatus.RESOLVED
+            else:
+                reference_range_status = ReferenceRangeStatus.NOT_FOUND
+        else:
+            reference_range_status = ReferenceRangeStatus.NOT_FOUND
+
         domain_result = LaboratoryResult(
             test_name=data.test_name,
             patient_profile_id=data.patient_profile_id,
             test_code=data.test_code,
             value=data.value,
             unit=data.unit,
-            reference_min=data.reference_min,
-            reference_max=data.reference_max,
+            reference_min=reference_min,
+            reference_max=reference_max,
             reference_text=data.reference_text,
             result_date=data.result_date,
             laboratory_name=data.laboratory_name,
             notes=data.notes,
+            reference_range_status=reference_range_status,
         )
 
         domain_result.interpret()
@@ -78,7 +128,7 @@ class LaboratoryService:
                 f"Немає результатів з result_date для пацієнта {patient_profile_id} по тесту {test_code!r}"
             )
 
-        latest = max(results_with_date, key=lambda r: r.result_date)
+        latest = max(results_with_date, key=lambda r: r.result_date)  # type: ignore[arg-type,return-value]
         history = [r for r in results_with_date if r is not latest]
 
         return latest, latest.trend(history)
