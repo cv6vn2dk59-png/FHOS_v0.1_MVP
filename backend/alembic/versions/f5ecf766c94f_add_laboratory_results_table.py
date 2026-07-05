@@ -1,4 +1,4 @@
-"""add laboratory_results table
+﻿"""add laboratory_results table
 
 Revision ID: f5ecf766c94f
 Revises: 35c9999458f6
@@ -33,7 +33,7 @@ def upgrade() -> None:
     sa.Column('reference_text', sa.String(length=255), nullable=True),
     sa.Column('result_date', sa.Date(), nullable=True),
     sa.Column('laboratory_name', sa.String(length=255), nullable=True),
-    sa.Column('interpretation', sa.Enum('NORMAL', 'LOW', 'HIGH', 'CRITICAL_LOW', 'CRITICAL_HIGH', 'UNKNOWN', name='laboratory_interpretation'), nullable=False),
+    sa.Column('interpretation', sa.Enum('normal', 'low', 'high', 'critical_low', 'critical_high', 'unknown', name='laboratory_interpretation'), nullable=False),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),

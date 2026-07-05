@@ -33,5 +33,4 @@ $root = 'D:\FHOS\FHOS_v0.1_MVP'
 - PostgreSQL чутливіший до query plan — розглянь `EXPLAIN ANALYZE` для запитів `ReferenceRangeRepository.get_candidates()` при реальному обсязі даних.
 
 ## Статус виконання
-Не виконано. Виконати перед першим production deployment або першим модулем, що явно вимагає PostgreSQL-специфічної поведінки.
-'@ | Out-File -Encoding utf8 "$root\docs\DEVELOPER_GUIDE\PostgreSQL Compatibility Checklist.md"
+Виконано 2026-07-05. Повний ланцюг міграцій (9 revisions) успішно застосований на чистій PostgreSQL 16 (Docker). Знайдено й виправлено 3 реальні несумісності: legacy DROP на неіснуючих таблицях (de66a32d894e), uppercase/lowercase enum-конфлікт (f5ecf766c94f), відсутнє явне CREATE TYPE для add_column enum (798c1de9ceb1).
