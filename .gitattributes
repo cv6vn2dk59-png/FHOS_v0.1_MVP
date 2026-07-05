@@ -1,0 +1,44 @@
+# =====================================================================
+# FHOS — нормалізація line endings
+# Причина: розробка на Windows (PowerShell), автогенеровані Alembic-
+# міграції створюються з LF, Git на Windows-checkout конвертує їх у
+# CRLF без цього файлу — це джерело "фантомних" діффів (весь файл
+# виглядає зміненим, хоча по суті нічого не змінилось).
+# =====================================================================
+
+# За замовчуванням: усі текстові файли зберігаються в репозиторії з LF,
+# Git сам вирішує, конвертувати їх при checkout чи ні (auto).
+* text=auto eol=lf
+
+# Явно текстові типи проекту — завжди LF у сховищі
+*.py     text eol=lf
+*.pyi    text eol=lf
+*.sql    text eol=lf
+*.md     text eol=lf
+*.json   text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.toml   text eol=lf
+*.cfg    text eol=lf
+*.ini    text eol=lf
+*.txt    text eol=lf
+*.sh     text eol=lf
+
+# Windows-специфічні скрипти — залишаємо CRLF, бо вони виконуються
+# тільки в PowerShell/cmd і мають зберігати "рідний" формат
+*.ps1    text eol=crlf
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+# Бінарні файли — ніякої конвертації, інакше Git їх пошкодить.
+# DICOM (*.dcm) додано наперед, бо Imaging-модуль вже працює з
+# медичними зображеннями, а надалі й напряму з DICOM (Vision).
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.dcm    binary
+*.db     binary
+*.sqlite binary
