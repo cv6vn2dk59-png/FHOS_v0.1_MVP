@@ -26,4 +26,5 @@ import app.modules.laboratory.persistence.reference_range_orm  # noqa: F401
 import app.modules.laboratory.persistence.reference_range_repository  # noqa: F401
 import app.modules.imaging.persistence.orm  # noqa: F401
 import app.modules.imaging.persistence.repository  # noqa: F401
-
+import app.modules.medications.persistence.orm  # noqa: F401
+import app.modules.medications.persistence.repository  # noqa: F401
