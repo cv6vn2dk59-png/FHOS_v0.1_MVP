@@ -5,7 +5,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 APP_DIR = BASE_DIR / "app"
 MODULES_DIR = APP_DIR / "modules"
 TESTS_DIR = BASE_DIR / "tests" / "modules"
-PERSISTENCE_INIT = APP_DIR / "persistence" / "__init__.py"
+MODEL_REGISTRY = APP_DIR / "persistence" / "model_registry.py"
 API_ROUTER = APP_DIR / "api" / "router.py"
 
 
@@ -58,8 +58,7 @@ from app.modules.{module_name}.schemas.{module_name} import {class_name}Create
 
 class {class_name}Service:
     """Стартовий Application Service. Domain ({class_name}) наразі містить лише
-    базові поля — клінічну/бізнес-логіку (методи на кшталт interpret(),
-    is_out_of_range(), risk_score()) потрібно додати в domain/entities.py
+    базові поля — клінічну/бізнес-логіку потрібно додати в domain/entities.py
     за прикладом app/modules/laboratory/domain/entities.py, ПЕРЕД тим як
     цей модуль вважати production-ready.
     """
@@ -205,56 +204,41 @@ def to_class_name(module_name: str) -> str:
     return "".join(part.capitalize() for part in module_name.split("_"))
 
 
-def _register_in_persistence_init(module_name: str, class_name: str) -> None:
-    """Дописує імпорти ORM і Repository в app/persistence/__init__.py.
+def _register_in_model_registry(module_name: str) -> None:
+    """Дописує import (не from-import) ORM і Repository в
+    app/persistence/model_registry.py.
+
+    Свідомо `import module`, НЕ `from module import Клас` — простий
+    import не вимагає, щоб клас уже існував у момент виконання рядка,
+    лише факт виконання файлу. Це запобігає циклічному імпорту, коли
+    ORM-файл модуля сам стає першою точкою входу процесу (Common
+    Pitfalls #3, знайдено на ReferenceRangeORM).
 
     Без цього кроку RepositoryRegistry.register(...) і Base.metadata
-    ніколи не побачать новий модуль (та сама причина Знахідок 6/7/12
-    зі Sprint 3 Laboratory) — Alembic autogenerate згенерує порожню
-    міграцію, а uow.repo(...) мовчки поверне generic BaseRepository.
+    ніколи не побачать новий модуль — Alembic autogenerate згенерує
+    порожню міграцію, а uow.repo(...) мовчки поверне generic BaseRepository.
     """
-    content = PERSISTENCE_INIT.read_text(encoding="utf-8")
+    content = MODEL_REGISTRY.read_text(encoding="utf-8")
 
-    orm_import = (
-        f"from app.modules.{module_name}.persistence.orm import {class_name}ORM"
-    )
-    repo_import = (
-        f"from app.modules.{module_name}.persistence.repository import "
-        f"{class_name}Repository  # noqa: F401 — реєструє в RepositoryRegistry"
-    )
+    orm_import = f"import app.modules.{module_name}.persistence.orm  # noqa: F401"
+    repo_import = f"import app.modules.{module_name}.persistence.repository  # noqa: F401"
 
     if orm_import in content:
-        print(f"SKIP: {PERSISTENCE_INIT} вже містить імпорт {class_name}ORM")
+        print(f"SKIP: {MODEL_REGISTRY} вже містить імпорт модуля {module_name}")
         return
 
-    lines = content.splitlines()
-    insert_at = next(
-        (i for i, line in enumerate(lines) if line.strip().startswith("__all__")),
-        len(lines),
-    )
+    stripped = content.rstrip("\n")
+    new_content = f"{stripped}\n{orm_import}\n{repo_import}\n"
 
-    lines.insert(insert_at, orm_import)
-    lines.insert(insert_at + 1, repo_import)
-    lines.insert(insert_at + 2, "")
-
-    new_content = "\n".join(lines)
-
-    if "__all__" in new_content:
-        new_content = new_content.replace(
-            '__all__ = [',
-            f'__all__ = [\n    "{class_name}ORM",\n    "{class_name}Repository",',
-            1,
-        )
-
-    PERSISTENCE_INIT.write_text(new_content, encoding="utf-8")
-    print(f"OK: {PERSISTENCE_INIT} оновлено (додано {class_name}ORM, {class_name}Repository)")
+    MODEL_REGISTRY.write_text(new_content, encoding="utf-8")
+    print(f"OK: {MODEL_REGISTRY} оновлено (додано import для {module_name})")
 
 
 def _register_router(module_name: str, route_prefix: str) -> None:
     """Дописує імпорт і include_router() в app/api/router.py.
 
-    Без цього роут існує в коді, але недосяжний по HTTP (Знахідка 12
-    зі Sprint 3 Laboratory — модуль був повністю готовий, але не
+    Без цього роут існує в коді, але недосяжний по HTTP (Sprint 3
+    Laboratory Знахідка 12 — модуль був повністю готовий, але не
     зареєстрований, і всі запити повертали 404).
     """
     content = API_ROUTER.read_text(encoding="utf-8")
@@ -319,7 +303,7 @@ def create_module(module_name: str) -> None:
         encoding="utf-8",
     )
 
-    _register_in_persistence_init(module_name, class_name)
+    _register_in_model_registry(module_name)
     _register_router(module_name, route_prefix)
 
     print(f"OK: module created: app/modules/{module_name}")
@@ -329,7 +313,7 @@ def create_module(module_name: str) -> None:
     print(f"1. Додай реальні поля й бізнес-методи в domain/entities.py")
     print(f"2. Онови persistence/orm.py відповідними колонками")
     print(f"3. Онови persistence/mapper.py відповідно до нових полів")
-    print(f"4. alembic revision --autogenerate -m \"add {table_name} table\"")
+    print(f'4. alembic revision --autogenerate -m "add {table_name} table"')
     print(f"5. alembic upgrade head")
 
 
