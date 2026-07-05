@@ -1,6 +1,6 @@
 ﻿# ADR-0006 — Architecture Governance Lifecycle
 ## Статус
-Прийнято.
+Прийнято. Замінено ADR-0008.
 ## Рішення
 Архітектурне рішення проходить цикл: Discussion → Architecture Decision → Implementation → Validation (тести) → Constitution Update → Approved Architecture. Chatове/усне архітектурне рішення (Architecture Decision) є достатньою підставою для реалізації коду — очікування формального оновлення Constitution перед написанням коду не потрібне. Constitution залишається єдиним джерелом архітектурної істини, але може тимчасово відставати від коду; тимчасові compatibility-рішення (наприклад, risk_score() як alias для abnormality_score()) фіксують цей перехідний стан явно, а не приховують його.
 ## Наслідки
