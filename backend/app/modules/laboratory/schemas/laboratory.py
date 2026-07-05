@@ -20,6 +20,7 @@ class LaboratoryResultCreate(BaseModel):
     reference_text: str | None = Field(default=None, max_length=255)
     result_date: date | None = None
     laboratory_name: str | None = Field(default=None, max_length=255)
+    method: str | None = Field(default=None, max_length=100)
     notes: str | None = None
 
     @model_validator(mode="after")

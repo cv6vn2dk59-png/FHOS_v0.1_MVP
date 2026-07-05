@@ -53,32 +53,41 @@ class LaboratoryResult:
         if self.reference_min is not None and self.reference_max is not None:
             if self.reference_min > self.reference_max:
                 raise ValueError(
-                    f"reference_min ({self.reference_min}) not valid vs "
-                    f"reference_max ({self.reference_max}) for {self.test_name!r}"
+                    f"reference_min ({self.reference_min}) не може бути більшим за "
+                    f"reference_max ({self.reference_max}) для тесту {self.test_name!r}"
                 )
 
+    def has_lower_bound(self) -> bool:
+        return self.reference_min is not None
+
+    def has_upper_bound(self) -> bool:
+        return self.reference_max is not None
+
     def has_reference_range(self) -> bool:
-        return self.reference_min is not None and self.reference_max is not None
+        return self.has_lower_bound() or self.has_upper_bound()
 
     def is_out_of_range(self) -> bool:
         if self.value is None or not self.has_reference_range():
             return False
-        return self.value < self.reference_min or self.value > self.reference_max
+        if self.has_lower_bound() and self.value < self.reference_min:
+            return True
+        if self.has_upper_bound() and self.value > self.reference_max:
+            return True
+        return False
 
     def deviation_percent(self) -> float | None:
         if self.value is None or not self.has_reference_range():
             return None
 
-        if self.value < self.reference_min:
+        if self.has_lower_bound() and self.value < self.reference_min:
             boundary = self.reference_min
-        elif self.value > self.reference_max:
+        elif self.has_upper_bound() and self.value > self.reference_max:
             boundary = self.reference_max
         else:
             return 0.0
 
         if boundary == 0:
             return None
-
         return round((self.value - boundary) / abs(boundary) * 100, 2)
 
     def is_critical(self) -> bool:
@@ -96,7 +105,7 @@ class LaboratoryResult:
             self.interpretation = LaboratoryInterpretation.NORMAL
             return self.interpretation
 
-        is_low = self.value < self.reference_min
+        is_low = self.has_lower_bound() and self.value < self.reference_min
 
         if self.is_critical():
             self.interpretation = (
@@ -112,12 +121,9 @@ class LaboratoryResult:
             return TrendDirection.INSUFFICIENT_DATA
 
         comparable = [
-            r
-            for r in previous_results
-            if r.test_code == self.test_code
-            and r.value is not None
-            and r.result_date is not None
-            and r.result_date < self.result_date
+            r for r in previous_results
+            if r.test_code == self.test_code and r.value is not None
+            and r.result_date is not None and r.result_date < self.result_date
         ]
 
         if not comparable:
@@ -153,6 +159,5 @@ class LaboratoryResult:
         return 1.0
 
     def risk_score(self) -> float | None:
-        """Compatibility alias for Constitution v3.0. Remove after
-        Constitution v3.1 is explicitly Approved."""
+        """Compatibility alias — видалити після Constitution v3.1 Approved."""
         return self.abnormality_score()

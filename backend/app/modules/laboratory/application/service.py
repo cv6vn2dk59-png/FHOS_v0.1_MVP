@@ -34,22 +34,6 @@ class LaboratoryService:
         sex: str | None = None,
         age: int | None = None,
     ) -> LaboratoryResult:
-        """Створює лабораторний результат.
-
-        Якщо reference_min/reference_max передані явно в data — вони
-        мають абсолютний пріоритет (ReferenceRangeStatus.MANUAL), Resolver
-        НЕ викликається і не може мовчки перезаписати ручне введення.
-
-        Якщо не передані — намагається знайти підходящий діапазон через
-        ReferenceRangeResolver, використовуючи sex/age як примітивний
-        контекст пацієнта (Application Layer, що викликає цей метод,
-        відповідає за те, щоб дістати ці примітиви з Profile — Laboratory
-        сам ніколи не звертається до PatientProfileORM).
-
-        Якщо резолвер нічого не знайшов (або test_code/unit відсутні,
-        роблячи пошук неможливим) — ReferenceRangeStatus.NOT_FOUND,
-        результат лишається з reference_min/max = None (не вигадуємо дані).
-        """
         reference_min = data.reference_min
         reference_max = data.reference_max
 
@@ -63,6 +47,7 @@ class LaboratoryService:
                 sex=sex,
                 age=age,
                 laboratory_name=data.laboratory_name,
+                method=data.method,
             )
             if resolved is not None:
                 reference_min = resolved.reference_min
@@ -128,7 +113,7 @@ class LaboratoryService:
                 f"Немає результатів з result_date для пацієнта {patient_profile_id} по тесту {test_code!r}"
             )
 
-        latest = max(results_with_date, key=lambda r: r.result_date)  # type: ignore[arg-type,return-value]
+        latest = max(results_with_date, key=lambda r: r.result_date)
         history = [r for r in results_with_date if r is not latest]
 
         return latest, latest.trend(history)
