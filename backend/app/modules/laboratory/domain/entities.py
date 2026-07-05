@@ -157,7 +157,3 @@ class LaboratoryResult:
         if abs_deviation <= 50:
             return 0.75
         return 1.0
-
-    def risk_score(self) -> float | None:
-        """Compatibility alias — видалити після Constitution v3.1 Approved."""
-        return self.abnormality_score()

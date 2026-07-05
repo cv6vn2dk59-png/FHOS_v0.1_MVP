@@ -84,17 +84,3 @@ class TestAbnormalityScoreNegativeBoundaries:
         result = make_result(value=1.6, reference_min=4.0, reference_max=5.0)
         assert result.deviation_percent() == pytest.approx(-60.0)
         assert result.abnormality_score() == 1.0
-
-
-class TestRiskScoreAlias:
-    def test_risk_score_equals_abnormality_score_normal(self):
-        result = make_result(value=4.5)
-        assert result.risk_score() == result.abnormality_score() == 0.0
-
-    def test_risk_score_equals_abnormality_score_critical(self):
-        result = make_result(value=15.0, reference_min=3.9, reference_max=5.5)
-        assert result.risk_score() == result.abnormality_score() == 1.0
-
-    def test_risk_score_none_when_data_missing(self):
-        result = make_result(value=None)
-        assert result.risk_score() is None
