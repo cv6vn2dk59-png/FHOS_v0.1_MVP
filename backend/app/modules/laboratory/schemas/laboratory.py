@@ -6,6 +6,7 @@ from app.modules.laboratory.domain.entities import (
     LaboratoryInterpretation,
     ReferenceRangeStatus,
     TrendDirection,
+    TrendRisk,
 )
 
 
@@ -58,3 +59,9 @@ class LaboratoryTrendRead(BaseModel):
     latest_value: float | None
     latest_interpretation: LaboratoryInterpretation
     trend: TrendDirection
+
+class TrendRiskRead(BaseModel):
+    patient_profile_id: int
+    test_code: str
+    risk: TrendRisk
+    distances: list[float] | None = None

@@ -2,15 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.application.dependencies import get_uow
 from app.application.uow import UnitOfWork
+
 from app.modules.laboratory.application.service import (
     InvalidPatientReferenceError,
     LaboratoryResultNotFoundError,
     LaboratoryService,
 )
+from app.modules.laboratory.application.trend_analysis_service import TrendAnalysisService
 from app.modules.laboratory.schemas.laboratory import (
     LaboratoryResultCreate,
     LaboratoryResultRead,
     LaboratoryTrendRead,
+    TrendRiskRead,
 )
 from app.modules.profile.application.service import ProfileService
 from app.shared.dates import calculate_age
@@ -76,4 +79,19 @@ def get_trend(
         latest_value=latest.value,
         latest_interpretation=latest.interpretation,
         trend=trend_direction,
+    )
+@router.get("/patient/{patient_profile_id}/trend-risk/{test_code}", response_model=TrendRiskRead)
+def get_trend_risk(
+    patient_profile_id: int,
+    test_code: str,
+    uow: UnitOfWork = Depends(get_uow),
+):
+    service = TrendAnalysisService(uow)
+    assessment = service.assess_trend_risk(patient_profile_id, test_code)
+
+    return TrendRiskRead(
+        patient_profile_id=patient_profile_id,
+        test_code=test_code,
+        risk=assessment.risk,
+        distances=assessment.distances,
     )
