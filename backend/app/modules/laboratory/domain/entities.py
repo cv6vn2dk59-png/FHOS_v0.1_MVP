@@ -157,3 +157,63 @@ class LaboratoryResult:
         if abs_deviation <= 50:
             return 0.75
         return 1.0
+
+class TrendRisk(str, enum.Enum):
+    INCREASING_RISK = "increasing_risk"
+    DECREASING_RISK = "decreasing_risk"
+    STABLE = "stable"
+    UNCLEAR = "unclear"
+    INSUFFICIENT_DATA = "insufficient_data"
+
+
+@dataclass
+class TrendRiskAssessment:
+    """Оцінка динаміки відхилення лабораторного показника від
+    reference range на останніх результатах (Trend Risk v1).
+
+    Навмисно НЕ використовує abnormality_score() (severity-класифікатор
+    з дискретними сходинками 0/0.25/0.5/0.75/1.0 — непридатний для
+    відстеження динаміки, бо втрачає роздільну здатність всередині
+    кожного кошика). Основа — deviation_percent(), яка є canonical
+    неперервною величиною відхилення від межі норми.
+
+    Поріг шуму (stable_threshold_percent) перевикористовується з
+    LaboratoryResult.trend() — той самий механізм, що вже застосовується
+    для відрізнення реальної зміни від лабораторної похибки чи
+    біологічної варіабельності.
+    """
+
+    risk: TrendRisk
+    distances: list[float] | None = None
+
+    @classmethod
+    def assess(cls, results: list["LaboratoryResult"]) -> "TrendRiskAssessment":
+        """Приймає результати одного test_code для одного пацієнта,
+        ВІДСОРТОВАНІ за result_date за зростанням (старі -> нові).
+        Використовує останні 3 для оцінки.
+        """
+        if len(results) < 3:
+            return cls(risk=TrendRisk.INSUFFICIENT_DATA)
+
+        last_three = results[-3:]
+        raw_distances = [r.deviation_percent() for r in last_three]
+
+        if any(d is None for d in raw_distances):
+            return cls(risk=TrendRisk.INSUFFICIENT_DATA)
+
+        distances = [abs(d) for d in raw_distances]
+        threshold = last_three[-1].stable_threshold_percent
+
+        delta_1 = distances[1] - distances[0]
+        delta_2 = distances[2] - distances[1]
+
+        if abs(delta_1) <= threshold and abs(delta_2) <= threshold:
+            return cls(risk=TrendRisk.STABLE, distances=distances)
+
+        if delta_1 > threshold and delta_2 > threshold:
+            return cls(risk=TrendRisk.INCREASING_RISK, distances=distances)
+
+        if delta_1 < -threshold and delta_2 < -threshold:
+            return cls(risk=TrendRisk.DECREASING_RISK, distances=distances)
+
+        return cls(risk=TrendRisk.UNCLEAR, distances=distances)
