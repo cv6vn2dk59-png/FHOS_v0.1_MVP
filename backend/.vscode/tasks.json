@@ -1,0 +1,64 @@
+﻿
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "FHOS: Run API",
+      "type": "shell",
+      "command": ".venv\\Scripts\\uvicorn.exe app.main:app --reload",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "reveal": "always" }
+    },
+    {
+      "label": "FHOS: Run Tests",
+      "type": "shell",
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/ -v",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      "label": "FHOS: Alembic Upgrade Head",
+      "type": "shell",
+      "command": ".venv\\Scripts\\alembic.exe upgrade head",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "FHOS: Alembic Current",
+      "type": "shell",
+      "command": ".venv\\Scripts\\alembic.exe current",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "FHOS: Alembic Autogenerate",
+      "type": "shell",
+      "command": ".venv\\Scripts\\alembic.exe revision --autogenerate -m \"${input:migrationMessage}\"",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "FHOS: Git Status",
+      "type": "shell",
+      "command": "git status",
+      "options": { "cwd": "${workspaceFolder}/.." },
+      "problemMatcher": []
+    },
+    {
+      "label": "FHOS: Pre-commit Check (status + tests + alembic current)",
+      "dependsOrder": "sequence",
+      "dependsOn": ["FHOS: Git Status", "FHOS: Run Tests", "FHOS: Alembic Current"],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "migrationMessage",
+      "type": "promptString",
+      "description": "Опис нової Alembic-міграції"
+    }
+  ]
+}
+'@ | Out-File -Encoding utf8 .vscode\tasks.json

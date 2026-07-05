@@ -1,4 +1,4 @@
-__pycache__/
+﻿__pycache__/
 *.py[cod]
 .venv/
 venv/
@@ -15,3 +15,4 @@ venv/
 *.code-workspace
 .DS_Store
 *.log
+!backend/.vscode/tasks.json
