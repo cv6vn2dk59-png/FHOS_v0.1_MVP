@@ -10,6 +10,8 @@ BRAND_TO_SUBSTANCE: dict[str, str] = {
     "варфарин": "warfarin",
     "кордарон": "amiodarone",
     "аміодарон": "amiodarone",
+    "сертралін": "sertraline",
+    "транілципромін": "tranylcypromine",
 }
 
 
