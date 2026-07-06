@@ -28,3 +28,5 @@ import app.modules.imaging.persistence.orm  # noqa: F401
 import app.modules.imaging.persistence.repository  # noqa: F401
 import app.modules.medications.persistence.orm  # noqa: F401
 import app.modules.medications.persistence.repository  # noqa: F401
+import app.modules.drug_interactions.persistence.orm  # noqa: F401
+import app.modules.drug_interactions.persistence.repository  # noqa: F401
