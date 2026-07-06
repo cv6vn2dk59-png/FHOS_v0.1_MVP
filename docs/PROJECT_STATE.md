@@ -61,3 +61,22 @@ PROJECT_STATE.md → CONSTITUTION.md → поточне завдання.
 Якщо вставлений текст Constitution відрізняється версією від того, що
 зафіксовано вище (v3.1) — довіряти git, не вставленому тексту.
 '@ | Set-Content -Path docs\PROJECT_STATE.md -Encoding utf8
+## Candidate Principles (обговорення, не Constitution)
+Обидва — спостереження з одного Sprint 4, недостатньо підтверджень
+(Confirmed Repetition) для формалізації. Переглянути після Drug Interactions.
+
+- **Scope First (евристика Architect Mode, не окремий принцип)**: перед
+  проєктуванням архітектури визначити межі предметної області (Scope).
+  НЕ те саме, що Confirmed Repetition Before Abstraction — Диявол навів
+  валідні контрприклади незалежності цих двох понять (FHIR Import потребує
+  Scope без жодного Confirmed Repetition; Repository-абстракція — навпаки).
+  Виникло при звуженні Drug Interactions v1 до Drug↔Drug.
+
+- **Devil Advocate потребує окремої цільової функції, не лише ролі**:
+  без явної вимоги "спершу знайти й спростувати контрприклад, лише потім
+  погоджуватись" роль Devil Advocate вироджується в третього експерта, що
+  підтакує. Практичний наслідок для FHOS зараз: у майбутніх Architect
+  Sessions (включно з Drug Interactions) явно вимагати від Devil Review
+  спершу контрприклад/заперечення, перш ніж приймати пропозицію. Пряме
+  застосування до майбутнього Consilium Engine (ADR ще не існує) — Devil
+  у консиліумі має окрему цільову функцію, відмінну від "лікарів".
