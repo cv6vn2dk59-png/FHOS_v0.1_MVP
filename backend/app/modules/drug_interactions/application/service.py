@@ -10,6 +10,9 @@ patient_note і prescription_history будуть додані окремими 
 from app.application.uow import UnitOfWork
 from app.modules.drug_interactions.domain.entities import (
     DrugInteraction,
+    MedicationRecord,
+    PrescriptionHistoryEntry,
+    find_historical_overlapping_prescriptions,
     find_interactions,
 )
 from app.modules.drug_interactions.domain.name_mapping import normalize_drug_name
@@ -56,3 +59,27 @@ class DrugInteractionService:
 
         known_interactions = self._load_known_interactions()
         return find_interactions(active_substances, known_interactions)
+
+    def find_prescription_history(self, patient_profile_id: int) -> list[PrescriptionHistoryEntry]:
+        """Interaction Evidence View, блок prescription_history:
+        історичний факт спільного призначення (перетин у часі), НЕ
+        доказ безпеки. Дивиться на ВСЮ історію Medications (не тільки
+        активні, на відміну від check_active_medications()).
+        """
+        medication_service = MedicationService(self.uow)
+        medications = medication_service.list_medications_for_patient(
+            patient_profile_id=patient_profile_id, limit=1000,
+        )
+
+        records = [
+            MedicationRecord(
+                drug_name=m.drug_name,
+                substance=normalize_drug_name(m.drug_name),
+                start_date=m.start_date,
+                end_date=m.end_date,
+            )
+            for m in medications
+        ]
+
+        known_interactions = self._load_known_interactions()
+        return find_historical_overlapping_prescriptions(records, known_interactions)
