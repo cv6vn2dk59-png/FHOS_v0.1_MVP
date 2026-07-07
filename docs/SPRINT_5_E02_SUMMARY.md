@@ -64,3 +64,22 @@ Session потрібна для питань доступу і меж контр
 - Consistency Review Drug Interactions (за зразком Laboratory) після
   накопичення досвіду використання.
 '@ | Set-Content -Path docs\SPRINT_5_E02_SUMMARY.md -Encoding utf8
+
+cd D:\FHOS\FHOS_v0.1_MVP
+$addition = @'
+
+## Оновлення (Interaction Evidence View — prescription_history)
+
+Реалізовано другий блок Interaction Evidence View:
+- domain: PrescriptionHistoryEntry, find_historical_overlapping_prescriptions()
+  (overlap у часі, end_date=None -> триває дотепер) — commit 1f47f1d
+- application: DrugInteractionService.find_prescription_history() — commit 9ba63d8
+- tests: 3 інтеграційні тести — commit d68b739
+- API: GET /drug-interactions/patient/{id}/evidence (verified + prescription_history) — commit b9db677
+
+Усього тестів модуля: 28/28 passed.
+
+patient_note (третій блок Evidence View) — досі свідомо відкладено,
+без конкретного запиту на реалізацію.
+'@
+Add-Content -Path docs\SPRINT_5_E02_SUMMARY.md -Value $addition -Encoding utf89
