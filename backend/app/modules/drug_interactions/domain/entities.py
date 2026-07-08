@@ -177,7 +177,7 @@ class PatientInteractionNote:
     substance_b: str
     note_text: str
     id: "int | None" = None
-    created_at: "object" = None
+    created_at: "datetime | None" = None
     unverified: bool = True
 
     def __post_init__(self) -> None:

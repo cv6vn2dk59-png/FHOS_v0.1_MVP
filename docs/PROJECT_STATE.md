@@ -48,16 +48,35 @@ Retrospective/Devil Review → ADR → Constitution Update → Approved Architec
   (використати чи видалити)
 - LaboratoryResultCreate.validate_reference_range() — навмисне дублювання
   domain-інваріанту (fail-fast на межі API), потребує явного коментаря в коді
+- PatientInteractionNote.pair_key() — unused поза тестами (той самий
+  патерн, що LaboratoryRepository.get_latest_result() вище), рішення
+  не прийнято (docs/SPRINT_5_E03_SUMMARY.md)
+- Optional-типізація patient_profile_id неоднорідна в межах
+  DrugInteractionService (і ширше — у Medications) — існуюча конвенція
+  проєкту, не локальна помилка, потребує рішення на рівні проєкту, не
+  одного модуля
+- drug_interactions/domain/entities.py росте (4 domain-об'єкти в одному
+  файлі) — кандидат на розділення, поки не блокер
 
 ## Наступна робота
-- Seed script для реальних 15 записів Phansalkar 2013 у таблицю
-  drug_interactions (fallback на дані в пам'яті досі покриває
-  функціональність v1, не блокер).
-- Consistency Review Drug Interactions (за зразком Laboratory) — після
-  накопичення досвіду використання усіх трьох блоків Evidence View.
-- Прогнати повний `python -m pytest tests/ -v` у робочому venv проєкту
-  для patient_note (перевірено лише на мінімальній копії зачеплених
-  файлів у чистому середовищі — див. docs/SPRINT_5_E02_SUMMARY.md).
+- Seed script для 15 записів Phansalkar 2013 — ЗРОБЛЕНО
+  (backend/scripts/seed_phansalkar_data.py, docs/SPRINT_5_E03_SUMMARY.md).
+  Ідемпотентність перевірена в ізольованому середовищі (15 додано →
+  15 skip при повторному запуску); НЕ виконано ще у вашому реальному
+  venv/БД — команда в SPRINT_5_E03_SUMMARY.md.
+- Consistency Review Drug Interactions — ЗРОБЛЕНО
+  (docs/SPRINT_5_E03_SUMMARY.md): 3 виправлення внесено
+  (String(2000)→String(MAX_PATIENT_NOTE_LENGTH), created_at типізація,
+  normalize_drug_name() для substance_a/substance_b у patient_note —
+  останнє за прямим рішенням користувача, не мовчки), 3 пункти
+  ідентифіковано й винесено в backlog вище без самостійного рішення.
+  Нормалізація substance_a/substance_b підтверджена лише в ізольованому
+  середовищі (11/11 passed) — потребує ще одного `pytest tests/ -v` у
+  реальному venv перед комітом (очікування: 150 passed).
+- Підтвердити реальним git status / alembic current / pytest у вашому
+  venv — не виконано з цієї сесії (немає доступу до D:\FHOS з поточного
+  середовища), команди для самостійного запуску в
+  docs/SPRINT_5_E03_SUMMARY.md, розділ 3.
 - Candidate principle (ще не в Constitution): "Confirmed Repetition, not
   Confirmed Intention" — абстракція виправдана лише реальним повторенням,
   що вже відбулося, не впевненістю в майбутньому повторенні. Виникло під

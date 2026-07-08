@@ -63,6 +63,42 @@ class TestCreatePatientNote:
             make_note_data(note_text="x" * 2001)
 
 
+class TestSubstanceNormalization:
+    def test_normalizes_brand_names_on_creation(self, in_memory_uow):
+        with in_memory_uow as uow:
+            service = DrugInteractionService(uow)
+            note = service.create_patient_note(
+                make_note_data(substance_a="варфарин", substance_b="кордарон")
+            )
+
+            assert note.substance_a == "warfarin"
+            assert note.substance_b == "amiodarone"
+
+    def test_pair_key_matches_across_brand_and_inn_naming(self, in_memory_uow):
+        with in_memory_uow as uow:
+            service = DrugInteractionService(uow)
+            note_via_brand = service.create_patient_note(
+                make_note_data(substance_a="варфарин", substance_b="кордарон")
+            )
+            note_via_inn = service.create_patient_note(
+                make_note_data(substance_a="warfarin", substance_b="amiodarone")
+            )
+
+            assert note_via_brand.pair_key() == note_via_inn.pair_key()
+
+    def test_raises_when_different_brand_names_normalize_to_same_substance(self, in_memory_uow):
+        with in_memory_uow as uow:
+            service = DrugInteractionService(uow)
+            # "кордарон" і "аміодарон" -- різні написання тієї самої
+            # речовини (amiodarone). Нормалізація перед побудовою
+            # domain-об'єкта повинна це виявити як self-interaction,
+            # навіть якщо сирі рядки, введені пацієнтом, відрізнялись.
+            with pytest.raises(ValueError):
+                service.create_patient_note(
+                    make_note_data(substance_a="кордарон", substance_b="аміодарон")
+                )
+
+
 class TestListPatientNotes:
     def test_lists_notes_for_patient(self, in_memory_uow):
         with in_memory_uow as uow:

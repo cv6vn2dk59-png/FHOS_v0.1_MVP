@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.modules.drug_interactions.domain.entities import MAX_PATIENT_NOTE_LENGTH
 from app.persistence.base import Base
 
 
@@ -53,7 +54,12 @@ class PatientInteractionNoteORM(Base):
 
     substance_a: Mapped[str] = mapped_column(String(255), nullable=False)
     substance_b: Mapped[str] = mapped_column(String(255), nullable=False)
-    note_text: Mapped[str] = mapped_column(String(2000), nullable=False)
+    # Довжина колонки навмисно прив'язана до domain-константи, не
+    # захардкожена окремим числом -- інакше зміна MAX_PATIENT_NOTE_LENGTH
+    # у domain мовчки розійдеться з реальним обмеженням у БД (Alembic
+    # snapshot при цьому все одно фіксує число, це нормально -- джерело
+    # істини для НОВИХ міграцій лишається тут).
+    note_text: Mapped[str] = mapped_column(String(MAX_PATIENT_NOTE_LENGTH), nullable=False)
     unverified: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(

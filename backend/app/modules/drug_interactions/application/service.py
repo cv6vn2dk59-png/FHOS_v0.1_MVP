@@ -102,11 +102,22 @@ class DrugInteractionService:
         """Interaction Evidence View, блок patient_note: особиста нотатка
         пацієнта про взаємодію двох речовин. unverified=True завжди --
         доменна модель (PatientInteractionNote) не дає створити інакше.
+
+        substance_a/substance_b нормалізуються через normalize_drug_name()
+        (той самий name_mapping, що й check_active_medications() /
+        find_prescription_history()) до збереження -- інакше pair_key()
+        нотатки ніколи не збігся б з pair_key() verified_interaction для
+        тієї самої пари речовин, введеної під різними назвами (напр.
+        "варфарин" у нотатці проти "warfarin" у verified_interactions).
+        Consistency Review, S05E03: нормалізація назви -- та сама технічна
+        операція для всіх трьох блоків Evidence View, не питання довіри
+        до джерела (те, що patient_note "не перевірено", стосується
+        ЗМІСТУ нотатки, не написання назви речовини).
         """
         domain_note = PatientInteractionNote(
             patient_profile_id=data.patient_profile_id,
-            substance_a=data.substance_a,
-            substance_b=data.substance_b,
+            substance_a=normalize_drug_name(data.substance_a),
+            substance_b=normalize_drug_name(data.substance_b),
             note_text=data.note_text,
         )
 
