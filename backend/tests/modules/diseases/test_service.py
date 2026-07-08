@@ -31,6 +31,34 @@ def in_memory_uow():
     return UnitOfWork(session_factory=session_factory)
 
 
+class TestSchemaValidation:
+    """DiseaseCreate.validate_dates() -- fail-fast на межі API, окремо
+    від Disease.__post_init__ (domain). Виявлено відсутнім під час
+    Consistency Review / live API verification (S06E02): жоден
+    існуючий тест не перевіряв цей шар напряму.
+    """
+
+    def test_raises_when_resolved_date_before_onset_date(self):
+        with pytest.raises(ValueError):
+            DiseaseCreate(
+                diagnosis_name="test",
+                onset_date=date(2026, 6, 1),
+                resolved_date=date(2026, 1, 1),
+            )
+
+    def test_allows_resolved_date_equal_to_onset_date(self):
+        data = DiseaseCreate(
+            diagnosis_name="test",
+            onset_date=date(2026, 3, 1),
+            resolved_date=date(2026, 3, 1),
+        )
+        assert data.resolved_date == data.onset_date
+
+    def test_raises_when_diagnosis_name_exceeds_max_length(self):
+        with pytest.raises(ValueError):
+            DiseaseCreate(diagnosis_name="x" * 256, onset_date=date(2026, 1, 1))
+
+
 class TestCreateDiseaseInvalidPatientReference:
     def test_raises_invalid_patient_reference_when_profile_does_not_exist(self, in_memory_uow):
         with in_memory_uow as uow:

@@ -13,6 +13,12 @@ class DiseaseCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_dates(self) -> "DiseaseCreate":
+        # Навмисне дублювання Disease.__post_init__ (domain-інваріант) --
+        # fail-fast на межі API з 422 замість того, щоб дійти до domain-шару
+        # і впасти там з менш зрозумілою помилкою. Той самий клас
+        # duplication, що вже задокументований для
+        # LaboratoryResultCreate.validate_reference_range() (PROJECT_STATE.md
+        # backlog) -- тут одразу з явним коментарем, а не залишено мовчки.
         if self.resolved_date is not None and self.resolved_date < self.onset_date:
             raise ValueError("resolved_date не може бути раніше onset_date")
         return self
