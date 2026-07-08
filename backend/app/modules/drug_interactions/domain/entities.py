@@ -156,3 +156,43 @@ def find_historical_overlapping_prescriptions(
             )
 
     return entries
+
+
+MAX_PATIENT_NOTE_LENGTH = 2000
+
+
+@dataclass
+class PatientInteractionNote:
+    """Особиста нотатка пацієнта про взаємодію двох речовин.
+
+    НЕ перевірена системою -- джерело може бути будь-яким (пошук в
+    інтернеті, порада знайомого тощо). Обов'язково показується з
+    позначкою "не перевірено", ніколи не змішується з
+    verified_interactions чи prescription_history (Architect Session,
+    S05E01: "Interaction Evidence View").
+    """
+
+    patient_profile_id: "int | None"
+    substance_a: str
+    substance_b: str
+    note_text: str
+    id: "int | None" = None
+    created_at: "object" = None
+    unverified: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.note_text or not self.note_text.strip():
+            raise ValueError("Текст нотатки не може бути порожнім")
+        if len(self.note_text) > MAX_PATIENT_NOTE_LENGTH:
+            raise ValueError(
+                f"Нотатка перевищує ліміт {MAX_PATIENT_NOTE_LENGTH} символів "
+                f"(зараз {len(self.note_text)})"
+            )
+        if _normalize(self.substance_a) == _normalize(self.substance_b):
+            raise ValueError("substance_a і substance_b не можуть збігатися")
+
+    def pair_key(self) -> tuple[str, str]:
+        """Той самий принцип симетрії, що й у DrugInteraction: порядок
+        введення речовин не має значення для пошуку нотатки.
+        """
+        return tuple(sorted([_normalize(self.substance_a), _normalize(self.substance_b)]))
