@@ -1,16 +1,18 @@
 """Application-сервіс Drug Interactions v1.
 
 Interaction Evidence View (docs/SPRINT_5_E01_SUMMARY.md): відповідь
-пацієнту складається з трьох незалежних блоків довіри. У v1 сервіс
-реалізує лише verified_interaction (дані з Phansalkar 2013) -
-patient_note і prescription_history будуть додані окремими сервісами
-пізніше, коли з'явиться реальний UI-запит на них, щоб не будувати
-структуру наперед (Confirmed Repetition, not Confirmed Intention).
+пацієнту складається з трьох незалежних блоків довіри. Усі три
+реалізовано: verified_interaction (Phansalkar 2013), prescription_history
+(перетин у часі за Medications) і patient_note (особиста нотатка,
+НЕ перевірена системою -- див. docs/SPRINT_5_E02_SUMMARY.md).
 """
+from sqlalchemy.exc import IntegrityError
+
 from app.application.uow import UnitOfWork
 from app.modules.drug_interactions.domain.entities import (
     DrugInteraction,
     MedicationRecord,
+    PatientInteractionNote,
     PrescriptionHistoryEntry,
     find_historical_overlapping_prescriptions,
     find_interactions,
@@ -20,8 +22,20 @@ from app.modules.drug_interactions.domain.phansalkar_2013 import (
     PHANSALKAR_2013_INTERACTIONS,
 )
 from app.modules.drug_interactions.persistence import mapper
-from app.modules.drug_interactions.persistence.orm import DrugInteractionORM
+from app.modules.drug_interactions.persistence.orm import (
+    DrugInteractionORM,
+    PatientInteractionNoteORM,
+)
+from app.modules.drug_interactions.schemas.drug_interactions import (
+    PatientInteractionNoteCreate,
+)
 from app.modules.medications.application.service import MedicationService
+
+
+class InvalidPatientReferenceError(Exception):
+    def __init__(self, patient_profile_id: int):
+        self.patient_profile_id = patient_profile_id
+        super().__init__(f"Профіль пацієнта з id={patient_profile_id} не існує")
 
 
 class DrugInteractionService:
@@ -83,3 +97,37 @@ class DrugInteractionService:
 
         known_interactions = self._load_known_interactions()
         return find_historical_overlapping_prescriptions(records, known_interactions)
+
+    def create_patient_note(self, data: PatientInteractionNoteCreate) -> PatientInteractionNote:
+        """Interaction Evidence View, блок patient_note: особиста нотатка
+        пацієнта про взаємодію двох речовин. unverified=True завжди --
+        доменна модель (PatientInteractionNote) не дає створити інакше.
+        """
+        domain_note = PatientInteractionNote(
+            patient_profile_id=data.patient_profile_id,
+            substance_a=data.substance_a,
+            substance_b=data.substance_b,
+            note_text=data.note_text,
+        )
+
+        orm_note = mapper.note_to_orm(domain_note)
+
+        try:
+            self.uow.repo(PatientInteractionNoteORM).add(orm_note)
+            self.uow.commit()
+        except IntegrityError as exc:
+            self.uow.rollback()
+            if data.patient_profile_id is not None:
+                raise InvalidPatientReferenceError(data.patient_profile_id) from exc
+            raise
+
+        return mapper.note_to_domain(orm_note)
+
+    def list_patient_notes(self, patient_profile_id: int | None) -> list[PatientInteractionNote]:
+        """Усі нотатки пацієнта про взаємодії (усі пари речовин).
+        Фільтрація за конкретною парою через pair_key() лишається на
+        боці споживача, коли з'явиться конкретна потреба.
+        """
+        repository = self.uow.repo(PatientInteractionNoteORM)
+        orm_notes = repository.get_notes_for_patient(patient_profile_id)
+        return [mapper.note_to_domain(orm) for orm in orm_notes]

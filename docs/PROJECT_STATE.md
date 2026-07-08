@@ -16,6 +16,10 @@ Canonical метод: abnormality_score() (не risk_score() — видален�
 - Trend Risk v1 (ADR-0011) — TrendAnalysisService.assess_trend_risk(),
   API: GET /laboratory/patient/{id}/trend-risk/{test_code}
   — commits 8706d3d, a38064f
+- Drug Interactions v1 (Sprint 5, docs/SPRINT_5_E01_SUMMARY.md,
+  docs/SPRINT_5_E02_SUMMARY.md) — Interaction Evidence View завершено,
+  усі три блоки: verified_interaction, prescription_history, patient_note.
+  Alembic head: 9a3d7c1f2b6e.
 
 ## Governance
 Architecture Governance Lifecycle: ADR-0008 (актуальна версія, supersedes ADR-0006)
@@ -46,9 +50,14 @@ Retrospective/Devil Review → ADR → Constitution Update → Approved Architec
   domain-інваріанту (fail-fast на межі API), потребує явного коментаря в коді
 
 ## Наступна робота
-- Drug Interactions — Architect Session (без коду): Source of Truth,
-  canonical identifier (ATC/RxNorm/локальні назви), versioning, licensing,
-  offline-підтримка
+- Seed script для реальних 15 записів Phansalkar 2013 у таблицю
+  drug_interactions (fallback на дані в пам'яті досі покриває
+  функціональність v1, не блокер).
+- Consistency Review Drug Interactions (за зразком Laboratory) — після
+  накопичення досвіду використання усіх трьох блоків Evidence View.
+- Прогнати повний `python -m pytest tests/ -v` у робочому venv проєкту
+  для patient_note (перевірено лише на мінімальній копії зачеплених
+  файлів у чистому середовищі — див. docs/SPRINT_5_E02_SUMMARY.md).
 - Candidate principle (ще не в Constitution): "Confirmed Repetition, not
   Confirmed Intention" — абстракція виправдана лише реальним повторенням,
   що вже відбулося, не впевненістю в майбутньому повторенні. Виникло під

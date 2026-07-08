@@ -82,4 +82,40 @@ $addition = @'
 patient_note (третій блок Evidence View) — досі свідомо відкладено,
 без конкретного запиту на реалізацію.
 '@
-Add-Content -Path docs\SPRINT_5_E02_SUMMARY.md -Value $addition -Encoding utf89
+Add-Content -Path docs\SPRINT_5_E02_SUMMARY.md -Value $addition -Encoding utf8
+
+## Оновлення (Interaction Evidence View — patient_note, третій блок)
+
+Реалізовано останній блок Interaction Evidence View:
+- domain: PatientInteractionNote вже існував (MAX_PATIENT_NOTE_LENGTH=2000,
+  unverified завжди True, pair_key() для симетричного пошуку) — тести
+  в tests/modules/drug_interactions/test_patient_note.py.
+- persistence: PatientInteractionNoteORM (таблиця
+  patient_interaction_notes, FK на patient_profiles ON DELETE SET NULL),
+  note_to_domain()/note_to_orm() у mapper.py, PatientInteractionNoteRepository
+  (get_notes_for_patient()) — Alembic-міграція 9a3d7c1f2b6e, down_revision
+  4866a7e4c6ea.
+- application: DrugInteractionService.create_patient_note() (IntegrityError
+  → InvalidPatientReferenceError, той самий патерн, що й Medications),
+  DrugInteractionService.list_patient_notes() — 6 інтеграційних тестів
+  у tests/modules/drug_interactions/test_patient_note_service.py.
+- API: POST /drug-interactions/patient-notes (201, 400 при неіснуючому
+  patient_profile_id, 422 при перевищенні ліміту 2000 символів — Pydantic
+  Field на межі API, узгоджено з domain-інваріантом). GET
+  /drug-interactions/patient/{id}/evidence тепер повертає всі три блоки:
+  verified_interactions, prescription_history, patient_notes.
+
+Усього тестів модуля: 28 (попередньо) + 8 (domain, вже існували) + 6
+(application) = перевірено окремим прогоном pytest у чистому venv:
+18/18 passed (test_patient_note.py, test_patient_note_service.py,
+test_service.py). Повний прогін усього модуля (усі файли разом, включно
+з test_prescription_history*.py) не виконувався в цій сесії — venv
+проєкту недоступний з поточного середовища; чиста перевірка зроблена на
+мінімальній копії зачеплених файлів + смоук-тест через FastAPI
+TestClient (create → 201, invalid patient_profile_id → 400, note_text
+> 2000 → 422, evidence view повертає patient_notes). Рекомендація:
+прогнати `python -m pytest tests/ -v` у робочому venv перед комітом,
+щоб підтвердити відсутність регресій за межами перевіреного зрізу.
+
+Interaction Evidence View v1 завершено: усі три блоки (verified_interaction,
+prescription_history, patient_note) реалізовані.

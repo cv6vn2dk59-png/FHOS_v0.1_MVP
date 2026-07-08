@@ -1,8 +1,11 @@
-from datetime import date
+from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.modules.drug_interactions.domain.entities import InteractionSeverity
+from app.modules.drug_interactions.domain.entities import (
+    MAX_PATIENT_NOTE_LENGTH,
+    InteractionSeverity,
+)
 
 
 class DrugInteractionRead(BaseModel):
@@ -33,13 +36,31 @@ class DrugInteractionCheckRead(BaseModel):
     has_interactions: bool
 
 
+class PatientInteractionNoteCreate(BaseModel):
+    patient_profile_id: int | None = None
+    substance_a: str = Field(min_length=1, max_length=255)
+    substance_b: str = Field(min_length=1, max_length=255)
+    note_text: str = Field(min_length=1, max_length=MAX_PATIENT_NOTE_LENGTH)
+
+
+class PatientInteractionNoteRead(BaseModel):
+    id: int
+    patient_profile_id: int | None
+    substance_a: str
+    substance_b: str
+    note_text: str
+    unverified: bool
+    created_at: datetime
+
+
 class InteractionEvidenceViewRead(BaseModel):
     """Interaction Evidence View (Architect Session, S05E01):
-    відповідь пацієнту складається з незалежних блоків довіри.
-    v1 реалізує verified_interaction і prescription_history;
-    patient_note - окремий сервіс на майбутнє.
+    відповідь пацієнту складається з трьох незалежних блоків довіри,
+    усі три реалізовано у v1: verified_interactions, prescription_history,
+    patient_notes.
     """
 
     patient_profile_id: int | None
     verified_interactions: list[DrugInteractionRead]
     prescription_history: list[PrescriptionHistoryEntryRead]
+    patient_notes: list[PatientInteractionNoteRead]
