@@ -1,4 +1,3 @@
-@'
 # ADR-0012 — Medication Name Mapping lives inside Drug Interactions
 
 ## Статус

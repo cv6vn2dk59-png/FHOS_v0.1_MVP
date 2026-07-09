@@ -1,4 +1,3 @@
-@'
 # FHOS — Project State Snapshot
 
 Останнє оновлення: Sprint 7 E04, Diseases→MONDO стартовий словник (2026-07-09)
@@ -255,7 +254,6 @@ https://icd.who.int/en/docs/icd11-license.pdf
 PROJECT_STATE.md → CONSTITUTION.md → поточне завдання.
 Якщо вставлений текст Constitution відрізняється версією від того, що
 зафіксовано вище (v3.1) — довіряти git, не вставленому тексту.
-'@ | Set-Content -Path docs\PROJECT_STATE.md -Encoding utf8
 ## Candidate Principles (обговорення, не Constitution)
 Обидва — спостереження з одного Sprint 4, недостатньо підтверджень
 (Confirmed Repetition) для формалізації. Переглянути після Drug Interactions.
