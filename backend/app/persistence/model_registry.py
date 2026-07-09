@@ -34,3 +34,5 @@ import app.modules.diseases.persistence.orm  # noqa: F401
 import app.modules.diseases.persistence.repository  # noqa: F401
 import app.modules.contraindications.persistence.orm  # noqa: F401
 import app.modules.contraindications.persistence.repository  # noqa: F401
+import app.modules.icd11.persistence.orm  # noqa: F401
+import app.modules.icd11.persistence.repository  # noqa: F401
