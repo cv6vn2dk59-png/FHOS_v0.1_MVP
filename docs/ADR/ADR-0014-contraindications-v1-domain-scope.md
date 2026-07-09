@@ -1,7 +1,10 @@
 # ADR-0014: Contraindications v1 -- Domain Scope
 
 ## Статус
-Прийнято (Architect Session завершено для domain-шару; application/persistence/API -- окремі кроки).
+Прийнято. Domain, persistence, application, API -- усі шари написані
+(S07E05). Див. "Оновлення (S07E05)" нижче -- порожній результат API
+НЕ означає "протипоказань немає", а лише "жодного збігу в маленьких
+словниках".
 
 ## Контекст
 Наступний Knowledge-модуль після Drug Interactions (речовина-речовина) і
@@ -76,3 +79,33 @@ Application-шар технічно можна писати (обидва бок
 мапінг), але рішення писати його зараз -- ОКРЕМЕ архітектурне
 рішення, не автоматичний наслідок наявності словників. Не приймається
 цим оновленням.
+
+## Оновлення (S07E05, 2026-07-09) -- application-шар написано
+`ContraindicationService.check_patient(patient_profile_id)`
+(app/modules/contraindications/application/service.py): читає АКТИВНІ
+(is_active()==True) Medications і Diseases пацієнта, нормалізує через
+normalize_to_chebi() / normalize_to_mondo(), шукає збіги через
+find_contraindications(). Той самий патерн, що
+DrugInteractionService.check_active_medications() -- читає facts з
+інших модулів, нічого не змінює.
+
+API: `GET /contraindications/patient/{patient_profile_id}` -- без
+POST, read-only knowledge asset (той самий підхід, що ICD11NodeRead).
+
+Свідомо задокументована в трьох місцях (docstring сервісу, docstring
+route, тут) поведінкова межа: normalize_to_chebi()/normalize_to_mondo()
+-- exact-match проти НАМІРЕНО малих словників (4 речовини, 10 хвороб).
+Порожній результат від check_patient() НЕ означає "у пацієнта немає
+протипоказань" -- здебільшого означає "жоден препарат/діагноз пацієнта
+не потрапив у ці малі словники". Це прямий, очікуваний наслідок
+Confirmed-Repetition обсягу обох словників, не помилка сервісу.
+Клінічно покладатись на порожній результат як на "все гаразд" -- НЕ
+можна, доки словники не розширяться на реальну потребу.
+
+Тестів: 8 (application-шар, in-memory SQLite, включно з нормалізацією
+брендової назви й альтернативної форми запису хвороби). API-шар
+перевірено smoke-тестом через TestClient у пісочниці (200,
+порожній список), формального TestClient-тесту в постійному наборі
+не додано -- той самий відкритий backlog-пункт "API-рівня тести
+відсутні як постійний шар" (PROJECT_STATE.md), не локальне рішення
+цього модуля.
