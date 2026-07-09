@@ -87,6 +87,16 @@ ICD-11 ліцензується за **Creative Commons Attribution-NoDerivs 3.0
 листів не з'явилось). Повний текст умов:
 https://icd.who.int/en/docs/icd11-license.pdf
 
+## Shared-модулі
+- app/shared/dates.py -- calculate_age()
+- app/shared/drug_identity/substance_mapping.py (S07E03, ADR-0012
+  завершення) -- BRAND_TO_SUBSTANCE (перенесено з drug_interactions),
+  SUBSTANCE_TO_CHEBI, normalize_to_chebi(). 4 речовини: warfarin
+  (CHEBI:10033), amiodarone (CHEBI:2663), sertraline (CHEBI:9123),
+  tranylcypromine (CHEBI:9653 -- сіль-форма, явне рішення, див.
+  docs/SPRINT_7_E03_SUMMARY.md). scripts/build_substance_to_chebi.py
+  документує алгоритм побудови з MeDIC Drug List.csv.
+
 ## ADR (актуальний список)
 - ADR-0001 — data owner
 - ADR-0002 — ukrainian-first
@@ -101,8 +111,9 @@ https://icd.who.int/en/docs/icd11-license.pdf
 - ADR-0011 — Trend Risk v1: deviation_percent() basis
 - ADR-0012 — Medication name mapping lives in Drug Interactions
 - ADR-0013 — Diseases v1 Domain Scope
-- ADR-0014 — Contraindications v1 Domain Scope (тільки domain-шар)
-- ADR-0015 — ICD-11 v1 Domain Scope (importer заблокований)
+- ADR-0014 — Contraindications v1 Domain Scope (application-шар
+  заблокований, п.4)
+- ADR-0015 — ICD-11 v1 Domain Scope (завершено, включно з importer)
 
 ## Відкритий backlog (не блокери)
 - LaboratoryRepository.get_latest_result() — unused, рішення не прийнято
@@ -138,6 +149,15 @@ https://icd.who.int/en/docs/icd11-license.pdf
 - Diseases.icd_code (вільний текст, ADR-0013) не звірений проти
   ICD11Node дерева — окреме майбутнє рішення (Second Consumer),
   не зроблено мовчки
+- SUBSTANCE_TO_CHEBI обмежений 4 речовинами з поточного
+  BRAND_TO_SUBSTANCE — не повна таблиця MeDIC (Confirmed Repetition,
+  ADR-0012 "Оновлення"), розширення при появі нової речовини в
+  реальному використанні
+- Contraindications application-шар усе ще заблокований (ADR-0014
+  п.4): тепер substance-side мапінг (CHEBI) готовий для 4 речовин,
+  але Medications.drug_name → BRAND_TO_SUBSTANCE → CHEBI — це
+  ланцюжок, не перевірений на реальному Medications-записі; і
+  disease-side (MONDO) мапінг досі відсутній повністю
 
 ## Наступна робота
 - Seed script (Drug Interactions) і Consistency Review — ЗРОБЛЕНО і
@@ -181,6 +201,20 @@ https://icd.who.int/en/docs/icd11-license.pdf
   дублікат). Файл однолистовий, попередження про кілька листів не
   з'явилось. Ліцензія перевірена окремо — CC BY-ND 3.0 IGO, деталі
   вище.
+- Substance Name → CHEBI mapping, app/shared/drug_identity (S07E03,
+  ADR-0012 завершення) — ЗРОБЛЕНО (ця сесія), файли записані напряму
+  у проєкт, ще НЕ підтверджено у вашому venv. Перед комітом прогнати:
+  ```powershell
+  cd D:\FHOS\FHOS_v0.1_MVP\backend
+  python -m pytest tests/ -v
+  git status
+  ```
+  Очікування: 10 нових тестів (tests/shared/drug_identity/), 216/216
+  (206 + 10) загалом. Жодної нової міграції — чистий Python-код, без
+  ORM/БД. Реальні значення: warfarin→CHEBI:10033,
+  amiodarone→CHEBI:2663, sertraline→CHEBI:9123,
+  tranylcypromine→CHEBI:9653 (сіль-форма, явне рішення — див.
+  docs/SPRINT_7_E03_SUMMARY.md).
 - Candidate principle (ще не в Constitution): "Confirmed Repetition, not
   Confirmed Intention" — абстракція виправдана лише реальним повторенням,
   що вже відбулося, не впевненістю в майбутньому повторенні. Виникло під
