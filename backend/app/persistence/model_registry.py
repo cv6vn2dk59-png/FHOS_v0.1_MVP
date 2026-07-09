@@ -32,3 +32,5 @@ import app.modules.drug_interactions.persistence.orm  # noqa: F401
 import app.modules.drug_interactions.persistence.repository  # noqa: F401
 import app.modules.diseases.persistence.orm  # noqa: F401
 import app.modules.diseases.persistence.repository  # noqa: F401
+import app.modules.contraindications.persistence.orm  # noqa: F401
+import app.modules.contraindications.persistence.repository  # noqa: F401
