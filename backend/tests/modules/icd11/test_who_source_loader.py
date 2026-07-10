@@ -108,3 +108,34 @@ class TestSourceRelease:
     def test_version_column_value_used_as_source_release(self, synthetic_xlsx):
         nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx))
         assert all(n.source_release == "2024-01-21" for n in nodes)
+
+
+class TestFullTreeNoChapterFilter:
+    """chapter_no=None (S07E06, ADR-0015 п.4 закрито) -- фільтр глави
+    вимкнено, вантажаться усі глави одразу. Синтетичний фікстур уже
+    містить рядок глави 02 (who:category-2A00), навмисно виключений
+    у тестах TestChapterFilterAndCounts вище -- тут перевіряємо
+    протилежне: він МАЄ бути включений."""
+
+    def test_includes_rows_from_multiple_chapters(self, synthetic_xlsx):
+        nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx), chapter_no=None)
+        ids = [n.id for n in nodes]
+        assert "who:chapter-01" in ids
+        assert "who:category-2A00" in ids
+
+    def test_still_excludes_unknown_class_kind(self, synthetic_xlsx):
+        nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx), chapter_no=None)
+        assert "who:weird" not in [n.id for n in nodes]
+
+    def test_count_equals_all_valid_rows_regardless_of_chapter(self, synthetic_xlsx):
+        """7 рядків фікстури - 1 (unknown_kind "weird") = 6 валідних
+        вузлів з УСІХ глав (5 з глави 01 + 1 з глави 02)."""
+        nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx), chapter_no=None)
+        assert len(nodes) == 6
+
+    def test_chapter_filter_still_works_when_explicit(self, synthetic_xlsx):
+        """Регресія: chapter_no="01" явно і далі поводиться так само,
+        як до появи повного дерева (зворотна сумісність)."""
+        nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx), chapter_no="01")
+        assert len(nodes) == 5
+        assert "who:category-2A00" not in [n.id for n in nodes]

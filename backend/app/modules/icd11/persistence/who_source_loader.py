@@ -1,11 +1,19 @@
 """Читання офіційного WHO SimpleTabulation ICD-11 MMS Excel-файлу
-у ICD11Node (S07E02, ADR-0015).
+у ICD11Node (S07E02, ADR-0015; повне дерево -- S07E06).
 
-v1 обмежується однією главою (за замовчуванням ChapterNo="01") --
-тестова підмножина, повне дерево 17000+ вузлів -- окреме майбутнє
-рішення (ADR-0015 п.4). Файл сам по собі НЕ зберігається в git
+v1 (S07E02) обмежувався однією главою (за замовчуванням ChapterNo="01")
+-- тестова підмножина. Повне дерево (S07E06, ADR-0015 п.4 закрито) --
+`chapter_no=None` вимикає фільтр глави повністю, вантажаться усі
+рядки файлу (усі 26+ глав). Файл сам по собі НЕ зберігається в git
 (розмір, дублювання зовнішнього джерела) -- шлях передається через
 WHO_ICD11_DATA_DIR, той самий принцип, що MEDIC_DATA_DIR.
+
+Функція/скрипт НЕ перейменовані при переході на повне дерево
+(`load_icd11_chapter_from_xlsx`, `chapter_no` -- лишились) --
+мінімальна зміна, зворотно сумісна: `chapter_no="01"` і далі працює
+так само, для тестів/точкового повторного seed-у однієї глави.
+Рішення свідоме, не мовчазне -- задокументовано в ADR-0015, оновлення
+S07E06.
 
 Побудова дерева -- двопрохідна, бо файл не містить прямого parent_id:
   Прохід 1: {BlockId: Linearization URI} для ВСІХ рядків файлу
@@ -94,9 +102,18 @@ def _normalize_chapter(value: str) -> str:
 
 def load_icd11_chapter_from_xlsx(
     who_data_dir: str | None = None,
-    chapter_no: str = "01",
+    chapter_no: str | None = "01",
     filename: str = DEFAULT_FILENAME,
 ) -> list[ICD11Node]:
+    """chapter_no=None -- фільтр глави вимкнено повністю, вантажаться
+    УСІ рядки файлу (усі глави), не тільки одна. Прохід 1 (BlockId ->
+    URI мапа) і так уже сканував увесь файл незалежно від chapter_no
+    -- це не змінюється. Єдина реальна відмінність повного дерева:
+    self-referencing FK (parent_id) покладається на порядок рядків
+    файлу (батько раніше дитини) для ВСІХ глав одразу, не тільки
+    всередині однієї -- та сама гарантія, що вже підтверджена для
+    глави 1 (0 unresolved_parents), тепер поширена на весь файл.
+    """
     data_dir = resolve_who_data_dir(who_data_dir)
     xlsx_path = data_dir / filename
     if not xlsx_path.exists():
@@ -133,7 +150,9 @@ def load_icd11_chapter_from_xlsx(
             blockid_to_uri[str(block_id).strip()] = str(uri).strip()
     print(f"Побудовано BlockId -> URI мапу: {len(blockid_to_uri)} записів")
 
-    normalized_filter = _normalize_chapter(str(chapter_no).strip())
+    normalized_filter = (
+        _normalize_chapter(str(chapter_no).strip()) if chapter_no is not None else None
+    )
 
     nodes: list[ICD11Node] = []
     skipped_wrong_chapter = 0
@@ -142,11 +161,14 @@ def load_icd11_chapter_from_xlsx(
     unresolved_parents = 0
 
     for row in raw_rows:
-        row_chapter_raw = row.get("ChapterNo")
-        row_chapter_str = str(row_chapter_raw).strip() if row_chapter_raw is not None else ""
-        if _normalize_chapter(row_chapter_str) != normalized_filter:
-            skipped_wrong_chapter += 1
-            continue
+        if normalized_filter is not None:
+            row_chapter_raw = row.get("ChapterNo")
+            row_chapter_str = (
+                str(row_chapter_raw).strip() if row_chapter_raw is not None else ""
+            )
+            if _normalize_chapter(row_chapter_str) != normalized_filter:
+                skipped_wrong_chapter += 1
+                continue
 
         class_kind_raw = (row.get("ClassKind") or "").strip().lower()
         try:
@@ -196,10 +218,11 @@ def load_icd11_chapter_from_xlsx(
 
         nodes.append(node)
 
-    print(f"Розділ {chapter_no}: імпортовано вузлів: {len(nodes)}")
+    chapter_label = chapter_no if chapter_no is not None else "УСІ (повне дерево)"
+    print(f"Глава {chapter_label}: імпортовано вузлів: {len(nodes)}")
     print(f"Пропущено (інша глава): {skipped_wrong_chapter}")
     print(f"Пропущено (невідомий ClassKind): {skipped_unknown_class_kind}")
     print(f"Пропущено (невалідний вузол, напр. порожній id): {skipped_invalid}")
-    print(f"Нерозв'язаних parent у межах глави (BlockId без відповідного URI): {unresolved_parents}")
+    print(f"Нерозв'язаних parent (BlockId без відповідного URI): {unresolved_parents}")
 
     return nodes
