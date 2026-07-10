@@ -1,6 +1,6 @@
 # FHOS — Project State Snapshot
 
-Останнє оновлення: Sprint 7 E06, ICD-11 повне дерево (2026-07-09)
+Останнє оновлення: Sprint 7 E07, Devil Review remediation (2026-07-10)
 
 ## Constitution
 Поточна версія: v3.1
@@ -188,6 +188,19 @@ https://icd.who.int/en/docs/icd11-license.pdf
   постійному наборі (лише smoke-тест у пісочниці) — той самий
   project-wide backlog-пункт "API-рівня тести відсутні", не локальне
   рішення цього модуля
+- ВІДКРИТЕ клінічне питання, СВІДОМО не вирішене (Devil Review S07E07):
+  чи `is_active()` (стан "сьогодні") — правильне часове вікно
+  релевантності для Contraindications? `ContraindicationService.
+  check_patient()` перевіряє лише АКТИВНІ на сьогодні препарати й
+  хвороби (той самий фільтр, що DrugInteractionService.
+  check_active_medications()) — але деякі протипоказання клінічно
+  релевантні і після завершення прийому препарату (напр. тривалий
+  період виведення з організму) чи після формального "resolved"
+  діагнозу. Власник проєкту явно відмовився вирішувати це питання
+  одноосібно чи мовчки успадковувати патерн DrugInteractionService за
+  замовчуванням — потрібне окреме клінічне рішення (медична експертиза
+  або явний product-owner-вибір), не архітектурний side-effect цього
+  спринту
 
 ## Наступна робота
 - Seed script (Drug Interactions) і Consistency Review — ЗРОБЛЕНО і
@@ -282,6 +295,35 @@ https://icd.who.int/en/docs/icd11-license.pdf
   1055 вузлів розділу 1 (з S07E02) розпізнані як дублікати, додано
   34989 нових — 1055+34989=36044, точний збіг. Жодної нової міграції.
   Деталі — docs/SPRINT_7_E06_SUMMARY.md.
+- Devil Review remediation (S07E07, 4 погоджені кроки з власником) —
+  ЗРОБЛЕНО (ця сесія), ще НЕ підтверджено кроки 3-4 у вашому venv (крок
+  1 -- реальний E2E-тест на 1197 записах -- і крок 2 -- `raise` замість
+  `print` для unresolved_parents -- вже підтверджені: 248/248).
+  1) Реальний E2E-тест: кордарон->amiodarone->CHEBI:2663,
+     кардіогенний шок->MONDO:0800175, 1 знайдено, реальний опис MeDIC
+     (рядок 2642). Закриває "жоден ланцюжок не перевірений на
+     реальних даних".
+  2) `load_icd11_chapter_from_xlsx()` тепер кидає `ValueError` при
+     unresolved_parents > 0 (раніше -- лише print). Одразу зловив
+     живий баг у власній тестовій фікстурі S07E06 (chapter-02 без
+     кореня) -- виправлено, 16/16 у tests/modules/icd11/
+     test_who_source_loader.py, 248/248 загалом.
+  3) `GET /contraindications/patient/{id}` тепер повертає об'єкт
+     `ContraindicationCheckResult` (`contraindications` +
+     `coverage_warning` -- СТАТИЧНИЙ текст, не динамічний лічильник,
+     свідоме звуження власником). `check_patient()` домену не
+     змінено.
+  4) `is_active()` як часове вікно релевантності Contraindications --
+     ЗАЛИШЕНО ВІДКРИТИМ у backlog вище, свідомо не вирішено (власник
+     явно відмовився вирішувати одноосібно).
+  Перед комітом прогнати:
+  ```powershell
+  cd D:\FHOS\FHOS_v0.1_MVP\backend
+  python -m pytest tests/ -v
+  ```
+  Очікування: 248/248 (без змін від кроку 2 -- крок 3 не додав нових
+  тестів, лише обгортку відповіді; крок 4 -- лише документація).
+  Деталі -- docs/SPRINT_7_E07_SUMMARY.md.
 - Candidate principle (ще не в Constitution): "Confirmed Repetition, not
   Confirmed Intention" — абстракція виправдана лише реальним повторенням,
   що вже відбулося, не впевненістю в майбутньому повторенні. Виникло під

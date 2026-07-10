@@ -225,4 +225,23 @@ def load_icd11_chapter_from_xlsx(
     print(f"Пропущено (невалідний вузол, напр. порожній id): {skipped_invalid}")
     print(f"Нерозв'язаних parent (BlockId без відповідного URI): {unresolved_parents}")
 
+    if unresolved_parents > 0:
+        # Devil Review, S07E07: раніше (S07E02-S07E06) це лише друкувалось
+        # як попередження. ICD11Node.is_root() перевіряє ЛИШЕ
+        # `parent_id is None` -- вузол-сирота (Grouping посилається на
+        # BlockId, якому не відповідає жоден Linearization URI у файлі)
+        # виглядав би невідрізнюваним від справжнього кореня (Chapter).
+        # Мовчазне спотворення дерева гірше за явний фейл: якщо WHO
+        # колись змінить файл так, що ця гарантія (0 unresolved_parents,
+        # підтверджено реальним запуском на всіх 36044 рядках, S07E06)
+        # перестане виконуватись -- краще падати з чіткою помилкою, ніж
+        # тихо вставляти фантомні корені.
+        raise ValueError(
+            f"{unresolved_parents} вузол(вузли) мають Grouping-посилання "
+            f"на BlockId без відповідного Linearization URI у файлі -- "
+            f"дерево буде спотворене (вузол-сирота стане невідрізнюваним "
+            f"від справжнього кореня). Перевір реальний WHO-файл: "
+            f"chapter_no={chapter_no!r}."
+        )
+
     return nodes

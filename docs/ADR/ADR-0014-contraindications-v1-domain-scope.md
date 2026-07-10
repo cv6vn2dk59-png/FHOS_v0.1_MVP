@@ -107,5 +107,47 @@ Confirmed-Repetition обсягу обох словників, не помилк
 перевірено smoke-тестом через TestClient у пісочниці (200,
 порожній список), формального TestClient-тесту в постійному наборі
 не додано -- той самий відкритий backlog-пункт "API-рівня тести
+
+## Оновлення (S07E07, Devil Review remediation, 2026-07-09) -- реальний
+## E2E-тест на 1197 записах
+Найбільша прогалина, названа Devil Review: усі 8 тестів S07E05 --
+на вигаданій парі CHEBI:10033/MONDO:0005044, жоден ланцюжок ніколи
+не прогнаний на реальних seed-даних. Закрито: незалежно перевірено
+напряму на CSV (рядки 2642, 6548), потім підтверджено реальним
+запуском у venv --
+
+```
+кордарон (укр. бренд) -> BRAND_TO_SUBSTANCE -> amiodarone
+  -> SUBSTANCE_TO_CHEBI -> CHEBI:2663
+кардіогенний шок -> DISEASE_TO_MONDO -> MONDO:0800175
+
+check_patient() -> 1 знайдено: CHEBI:2663 + MONDO:0800175,
+  "Amiodarone is contraindicated in patients with cardiogenic
+  shock, severe sinus-node dysfunction..." (реальний опис MeDIC,
+  рядок 2642 Contraindications List.csv)
+```
+
+Повний ланцюжок (укр. вільний текст -> нормалізація -> CHEBI/MONDO
+-> пошук серед реальних 1197 записів -> реальний опис) підтверджений
+на реальних даних, не лише на тестових фікстурах. Це закриває
+Критичний пункт #2 з Devil Review S07E06/07, не application-шар
+S07E05 -- той самий, той самий позов не переприймається.
 відсутні як постійний шар" (PROJECT_STATE.md), не локальне рішення
 цього модуля.
+
+## Оновлення (S07E07, Devil Review remediation, крок 3) -- coverage_warning
+Критичний пункт #1 з Devil Review: порожній `GET /contraindications/
+patient/{id}` виглядає як "протипоказань немає", а насправді здебільшого
+означає "жоден препарат/діагноз не потрапив у малі словники". Власник
+явно відхилив мій початковий варіант (динамічні лічильники
+`unmapped_medications_count`/`unmapped_diseases_count` -- нова логіка
+підрахунку, нова структура даних, зайве розширення Scope) і обрав
+простіший, дешевший варіант.
+
+Рішення: відповідь API стала об'єктом (`ContraindicationCheckResult`),
+не голим списком -- `{ contraindications: [...], coverage_warning: str }`.
+`coverage_warning` -- СТАТИЧНИЙ текст, ідентичний завжди, незалежно від
+результату (порожнього чи ні), без жодного підрахунку. Domain/
+application-шар (`ContraindicationService.check_patient()`) НЕ змінено
+-- і далі повертає `list[Contraindication]`, обгортку будує лише
+route-шар (`app/modules/contraindications/api/routes.py`).

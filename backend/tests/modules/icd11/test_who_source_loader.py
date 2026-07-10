@@ -33,6 +33,8 @@ ROWS = [
     ["fnd:1A00.Z", "who:category-1A00.Z", "1A00.Z", None,
      "- - Gastroenteritis or colitis of infectious origin, unspecified", "category",
      2, True, "01", "http://x", True, True, "1", "1A00-1A03", None, None, None, "2024-01-21"],
+    ["fnd:2", "who:chapter-02", None, "2", "Neoplasms", "chapter",
+     0, False, "02", "http://x", False, True, None, None, None, None, None, "2024-01-21"],
     ["fnd:2A00", "who:category-2A00", "2A00", None, "- Some chapter 2 category", "category",
      1, False, "02", "http://x", True, True, "2", None, None, None, None, "2024-01-21"],
     ["fnd:weird", "who:weird", None, None, "Weird row", "unknown_kind",
@@ -115,7 +117,12 @@ class TestFullTreeNoChapterFilter:
     вимкнено, вантажаться усі глави одразу. Синтетичний фікстур уже
     містить рядок глави 02 (who:category-2A00), навмисно виключений
     у тестах TestChapterFilterAndCounts вище -- тут перевіряємо
-    протилежне: він МАЄ бути включений."""
+    протилежне: він МАЄ бути включений.
+
+    who:chapter-02 (корінь глави 2, BlockId="2") доданий у Devil
+    Review S07E07: без нього category-2A00 (Grouping1="2") мала
+    unresolved parent -- живий баг у власному фікстурі, знайдений
+    щойно доданим `raise` у load_icd11_chapter_from_xlsx()."""
 
     def test_includes_rows_from_multiple_chapters(self, synthetic_xlsx):
         nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx), chapter_no=None)
@@ -128,10 +135,18 @@ class TestFullTreeNoChapterFilter:
         assert "who:weird" not in [n.id for n in nodes]
 
     def test_count_equals_all_valid_rows_regardless_of_chapter(self, synthetic_xlsx):
-        """7 рядків фікстури - 1 (unknown_kind "weird") = 6 валідних
-        вузлів з УСІХ глав (5 з глави 01 + 1 з глави 02)."""
+        """8 рядків фікстури - 1 (unknown_kind "weird") = 7 валідних
+        вузлів з УСІХ глав (5 з глави 01 + 2 з глави 02: chapter-02 +
+        category-2A00)."""
         nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx), chapter_no=None)
-        assert len(nodes) == 6
+        assert len(nodes) == 7
+
+    def test_chapter_02_category_parent_resolves_correctly(self, synthetic_xlsx):
+        """Регресія на власний баг, знайдений Devil Review S07E07:
+        category-2A00 (Grouping1="2") МАЄ резолвитись на chapter-02."""
+        nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx), chapter_no=None)
+        by_id = {n.id: n for n in nodes}
+        assert by_id["who:category-2A00"].parent_id == "who:chapter-02"
 
     def test_chapter_filter_still_works_when_explicit(self, synthetic_xlsx):
         """Регресія: chapter_no="01" явно і далі поводиться так само,
@@ -139,3 +154,44 @@ class TestFullTreeNoChapterFilter:
         nodes = load_icd11_chapter_from_xlsx(who_data_dir=str(synthetic_xlsx), chapter_no="01")
         assert len(nodes) == 5
         assert "who:category-2A00" not in [n.id for n in nodes]
+
+
+UNRESOLVED_PARENT_ROWS = [
+    ["fnd:1", "who:chapter-01", None, "1", "Certain infectious or parasitic diseases", "chapter",
+     0, False, "01", "http://x", False, True, None, None, None, None, None, "2024-01-21"],
+    # Grouping1="ghost-block" -- жоден рядок нижче не визначає
+    # BlockId="ghost-block" з Linearization URI, тому blockid_to_uri
+    # ніколи його не міститиме -- гарантований unresolved_parent.
+    ["fnd:orphan", "who:orphan", "1X99", None, "- Orphan category", "category",
+     1, False, "01", "http://x", True, True, "ghost-block", None, None, None, None, "2024-01-21"],
+]
+
+
+@pytest.fixture
+def unresolved_parent_xlsx(tmp_path):
+    wb = Workbook()
+    ws = wb.active
+    ws.append(HEADER)
+    for row in UNRESOLVED_PARENT_ROWS:
+        ws.append(row)
+    xlsx_dir = tmp_path / "who_data_unresolved"
+    xlsx_dir.mkdir()
+    xlsx_path = xlsx_dir / "SimpleTabulation-ICD-11-MMS-en.xlsx"
+    wb.save(xlsx_path)
+    return xlsx_dir
+
+
+class TestUnresolvedParentRaises:
+    """Devil Review, S07E07: раніше unresolved_parents лише друкувався
+    як попередження -- ICD11Node.is_root() перевіряє ЛИШЕ
+    parent_id is None, тому вузол-сирота виглядав би невідрізнюваним
+    від справжнього кореня. Тепер -- явний ValueError замість
+    мовчазного спотворення дерева."""
+
+    def test_raises_value_error_when_parent_block_id_unresolved(self, unresolved_parent_xlsx):
+        with pytest.raises(ValueError, match="Grouping-посилання"):
+            load_icd11_chapter_from_xlsx(who_data_dir=str(unresolved_parent_xlsx))
+
+    def test_error_message_mentions_count(self, unresolved_parent_xlsx):
+        with pytest.raises(ValueError, match="1 вузол"):
+            load_icd11_chapter_from_xlsx(who_data_dir=str(unresolved_parent_xlsx))
