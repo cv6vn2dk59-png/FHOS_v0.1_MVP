@@ -45,3 +45,30 @@ RepositoryRegistry.register(ConsentEnvelopeORM, ConsentEnvelopeRepository)
 RepositoryRegistry.register(PatientNodeStateORM, PatientNodeStateRepository)
 
 RepositoryRegistry.register(GuardianAuthorityORM, GuardianAuthorityRepository)
+
+
+class HealthNodeRepository(BaseRepository):
+    def by_external_id(self, external_id: str):
+        from app.modules.clinical_reasoning.persistence.orm import HealthNodeORM
+        stmt = select(HealthNodeORM).where(HealthNodeORM.external_id == external_id)
+        return self.db.execute(stmt).scalar_one_or_none()
+
+
+class HealthRelationRepository(BaseRepository):
+    def causes_for(self, symptom_node_id: str, limit: int = 25):
+        from app.modules.clinical_reasoning.persistence.orm import HealthNodeORM, HealthRelationORM
+        stmt = (
+            select(HealthRelationORM, HealthNodeORM)
+            .join(HealthNodeORM, HealthNodeORM.external_id == HealthRelationORM.to_node_id)
+            .where(
+                HealthRelationORM.from_node_id == symptom_node_id,
+                HealthRelationORM.relation_kind == "can_explain",
+            )
+            .limit(limit)
+        )
+        return list(self.db.execute(stmt).all())
+
+
+from app.modules.clinical_reasoning.persistence.orm import HealthNodeORM, HealthRelationORM
+RepositoryRegistry.register(HealthNodeORM, HealthNodeRepository)
+RepositoryRegistry.register(HealthRelationORM, HealthRelationRepository)

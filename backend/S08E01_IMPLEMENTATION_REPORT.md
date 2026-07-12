@@ -49,3 +49,10 @@ uvicorn app.main:app --reload
 - `JurisdictionPolicy` має структуру і persistence, але юридичний довідник країн ще не наповнений.
 - Care Transition має persistence, але scheduler/notifications ще не реалізовані.
 - Guardian restrictions зараз трактуються як перелік заборонених operations; складні категорії конфіденційної допомоги залишаються наступним епізодом.
+
+## S08E02 follow-up implemented
+
+- HTTP `POST /api/clinical-reasoning/hypothesis-expansion` backed only by stored graph edges.
+- Executable Devil Review with User Echo/independence/provenance checks and three mandatory review questions.
+- `scripts/import_phenotype_hpoa.py` with dry-run by default; raw HPO file stays outside git.
+- `scripts/seed_jurisdiction_policies.py` seeds only verified general-majority policies for UA and DE. It intentionally does not equate them with medical or digital consent.
