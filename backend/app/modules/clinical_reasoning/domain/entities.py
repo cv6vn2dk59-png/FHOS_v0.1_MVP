@@ -145,3 +145,54 @@ def check_hypothesis_expansion(hypotheses: list[ClinicalHypothesis]) -> list[str
                 )
 
     return violations
+
+
+class RelationKind(str, enum.Enum):
+    """SPEC розділ 3. CONTRAINDICATES навмисно НЕ використовується тут
+    -- уже покрито окремим модулем Contraindications, не дублюється."""
+
+    CAN_EXPLAIN = "can_explain"        # симптом -> можлива причина
+    AFFECTS = "affects"                 # показник A впливає на показник B (напрямлений)
+    ASSOCIATED_WITH = "associated_with"  # кореляція без встановленого напрямку
+
+
+@dataclass
+class HealthRelation:
+    """Ребро решітки: зв'язок між двома HealthNode.
+
+    НЕ описує "що лікує що" -- описує "що МОЖЕ пояснювати що"
+    (SPEC розділ 3). Кожне ребро зобов'язане мати evidence_level і
+    source_citation -- ребро без джерела не є частиною решітки, а є
+    Hypothesis (SPEC розділ 5, Hypothesis Lifecycle).
+    """
+
+    from_node_id: str          # external_id вихідного вузла
+    to_node_id: str            # external_id вузла призначення
+    relation_kind: RelationKind
+    evidence_level: EvidenceLevel
+    source_citation: str        # DOI/URL/PMID конкретного дослідження
+    is_directed: bool = True    # ASSOCIATED_WITH зазвичай False, CAN_EXPLAIN/AFFECTS -- True
+    id: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.from_node_id.strip():
+            raise ValueError("from_node_id не може бути порожнім")
+        if not self.to_node_id.strip():
+            raise ValueError("to_node_id не може бути порожнім")
+        if self.from_node_id == self.to_node_id:
+            raise ValueError("HealthRelation не може посилатись сам на себе")
+        if not self.source_citation.strip():
+            raise ValueError(
+                "source_citation обов'язковий -- ребро без джерела є "
+                "Hypothesis (SPEC розділ 5), не HealthRelation"
+            )
+
+    def involves(self, node_id: str) -> bool:
+        return node_id in (self.from_node_id, self.to_node_id)
+
+
+def find_neighbors(
+    node_id: str, relations: list["HealthRelation"]
+) -> list["HealthRelation"]:
+    """Patient Overlay крок 3 (SPEC розділ 6): усі прямі сусіди вузла."""
+    return [r for r in relations if r.involves(node_id)]
