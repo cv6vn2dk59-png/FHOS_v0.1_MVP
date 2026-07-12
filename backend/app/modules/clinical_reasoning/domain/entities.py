@@ -196,3 +196,53 @@ def find_neighbors(
 ) -> list["HealthRelation"]:
     """Patient Overlay крок 3 (SPEC розділ 6): усі прямі сусіди вузла."""
     return [r for r in relations if r.involves(node_id)]
+
+
+@dataclass
+class PatientNodeState:
+    """Posилання 'цей вузол активний у цього пацієнта' -- НЕ копія
+    структури HealthNode (SPEC розділ 18, виправлення попередньої
+    помилкової назви 'PatientKnowledgeCache як копія').
+
+    Patient/Episode Isolation Rule (Додаток A, 6.5): факти різних
+    пацієнтів чи різних епізодів НЕ можуть автоматично формувати
+    спільний причинний ланцюг без явно описаного зв'язку
+    (shared_pathogen, hereditary_relationship, confirmed_transmission
+    тощо) -- family_link_reason нижче саме для цього.
+    """
+
+    patient_id: str
+    node_id: str            # external_id відповідного HealthNode
+    episode_id: str          # ізолює цей запис від інших епізодів того самого пацієнта
+    activated_at: "datetime"
+    family_link_reason: str | None = None  # None = ізольований факт цього пацієнта
+    id: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.patient_id.strip():
+            raise ValueError("patient_id не може бути порожнім")
+        if not self.node_id.strip():
+            raise ValueError("node_id не може бути порожнім")
+        if not self.episode_id.strip():
+            raise ValueError("episode_id не може бути порожнім")
+
+
+def find_shared_nodes(
+    states: list["PatientNodeState"],
+) -> dict[str, list[str]]:
+    """SPEC розділ 18 ('куб'): знаходить вузли, активні у КІЛЬКОХ
+    різних пацієнтів одночасно -- саме той механізм, що ми
+    демонстрували вручну (Staphylococcus aureus у трьох членів сім'ї).
+
+    Повертає {node_id: [patient_id, ...]} лише для вузлів з 2+ пацієнтами.
+    Patient/Episode Isolation Rule: сам факт спільного node_id НЕ
+    означає автоматичний причинний зв'язок -- це лише виявляє
+    кандидатів, family_link_reason підтверджує зв'язок явно.
+    """
+    by_node: dict[str, list[str]] = {}
+    for state in states:
+        by_node.setdefault(state.node_id, [])
+        if state.patient_id not in by_node[state.node_id]:
+            by_node[state.node_id].append(state.patient_id)
+
+    return {node_id: patients for node_id, patients in by_node.items() if len(patients) >= 2}
