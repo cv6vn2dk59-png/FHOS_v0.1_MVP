@@ -36,3 +36,6 @@ import app.modules.contraindications.persistence.orm  # noqa: F401
 import app.modules.contraindications.persistence.repository  # noqa: F401
 import app.modules.icd11.persistence.orm  # noqa: F401
 import app.modules.icd11.persistence.repository  # noqa: F401
+
+import app.modules.clinical_reasoning.persistence.orm  # noqa: F401
+import app.modules.clinical_reasoning.persistence.repository  # noqa: F401

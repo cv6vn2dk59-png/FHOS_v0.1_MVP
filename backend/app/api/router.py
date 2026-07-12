@@ -10,6 +10,7 @@ from app.modules.drug_interactions.api.routes import router as drug_interactions
 from app.modules.diseases.api.routes import router as diseases_router
 from app.modules.icd11.api.routes import router as icd11_router
 from app.modules.contraindications.api.routes import router as contraindications_router
+from app.modules.clinical_reasoning.api.routes import router as clinical_reasoning_router
 
 
 api_router = APIRouter()
@@ -23,4 +24,5 @@ api_router.include_router(drug_interactions_router)
 api_router.include_router(diseases_router)
 api_router.include_router(icd11_router)
 api_router.include_router(contraindications_router)
+api_router.include_router(clinical_reasoning_router)
 api_router.include_router(legacy_api_router)
