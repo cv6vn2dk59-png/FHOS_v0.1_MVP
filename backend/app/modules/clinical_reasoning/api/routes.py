@@ -308,3 +308,92 @@ def mechanistic_clustering(data: MechanisticClusteringRequest):
         "limitations": result.limitations,
         "warnings": result.warnings,
     }
+
+from app.modules.clinical_reasoning.application.dynamic_consilium_service import DynamicConsiliumService
+from app.modules.clinical_reasoning.domain.dynamic_consilium import (
+    BranchReview,
+    ConsiliumRole,
+    ReviewPosition,
+)
+from app.modules.clinical_reasoning.schemas.dynamic_consilium import (
+    DynamicConsiliumRead,
+    DynamicConsiliumRequest,
+)
+
+
+@router.post("/dynamic-consilium", response_model=DynamicConsiliumRead)
+def dynamic_consilium(data: DynamicConsiliumRequest):
+    branches = [
+        HypothesisBranch(
+            id=item.id,
+            case_id=item.case_id,
+            title=item.title,
+            description=item.description,
+            root_trigger_ids=item.root_trigger_ids,
+            causal_domain=item.causal_domain,
+            branch_type=item.branch_type,
+            node_ids=item.node_ids,
+            edge_ids=item.edge_ids,
+            supporting_fact_ids=item.supporting_fact_ids,
+            contradicting_fact_ids=item.contradicting_fact_ids,
+            neutral_fact_ids=item.neutral_fact_ids,
+            missing_evidence_ids=item.missing_evidence_ids,
+            evidence_strength=item.evidence_strength,
+            confidence=item.confidence,
+            status=BranchStatus(item.status),
+            provenance=[ProvenanceReference(**p.model_dump()) for p in item.provenance],
+            context_constraints=[ContextConstraint(**constraint) for constraint in item.context_constraints],
+            safety_critical=item.safety_critical,
+        )
+        for item in data.branches
+    ]
+    roles = [
+        ConsiliumRole(
+            code=item.code,
+            title=item.title,
+            focus_domains=item.focus_domains,
+            devil_role=item.devil_role,
+        )
+        for item in data.roles
+    ]
+    reviews = [
+        BranchReview(
+            role_code=item.role_code,
+            branch_id=item.branch_id,
+            position=ReviewPosition(item.position),
+            rationale=item.rationale,
+            evidence_ids=item.evidence_ids,
+            requested_evidence_ids=item.requested_evidence_ids,
+            confidence=item.confidence,
+            provenance=[ProvenanceReference(**p.model_dump()) for p in item.provenance],
+        )
+        for item in data.reviews
+    ]
+    result = DynamicConsiliumService().evaluate(
+        data.case_id,
+        branches,
+        roles,
+        reviews,
+        data.cluster_branch_ids,
+    )
+    return {
+        "case_id": result.case_id,
+        "branch_reviews": [
+            {
+                **review.__dict__,
+                "position": review.position.value,
+                "provenance": [p.__dict__ for p in review.provenance],
+            }
+            for review in result.branch_reviews
+        ],
+        "consensus": {
+            **result.consensus.__dict__,
+            "minority_opinions": [
+                {**item.__dict__, "position": item.position.value}
+                for item in result.consensus.minority_opinions
+            ],
+        },
+        "violations": [violation.__dict__ for violation in result.violations],
+        "warnings": result.warnings,
+        "limitations": result.limitations,
+    }

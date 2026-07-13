@@ -433,3 +433,29 @@ class MechanisticClusterConflictORM(Base):
     branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class DynamicConsiliumSessionORM(Base):
+    __tablename__ = "dynamic_consilium_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    role_codes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    consensus_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    violations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    warnings: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class DynamicConsiliumReviewORM(Base):
+    __tablename__ = "dynamic_consilium_reviews"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("dynamic_consilium_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    branch_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    position: Mapped[str] = mapped_column(String(40), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    requested_evidence_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    confidence: Mapped[float] = mapped_column(nullable=False)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
