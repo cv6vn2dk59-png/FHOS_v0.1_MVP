@@ -99,3 +99,82 @@ def laboratory_profile(data: LaboratoryProfileRequest, uow: UnitOfWork = Depends
         "review_domains": [domain.__dict__ for domain in result["review_domains"]],
         "devil_review": result["devil_review"],
     }
+
+
+from app.modules.clinical_reasoning.application.discrimination_service import BranchDiscriminationService
+from app.modules.clinical_reasoning.domain.branch_discrimination import (
+    BranchEvidenceEffect,
+    EvidenceCandidate,
+    EvidenceEffectType,
+)
+from app.modules.clinical_reasoning.domain.causality import ContextConstraint, ProvenanceReference
+from app.modules.clinical_reasoning.domain.hypothesis_expansion import BranchStatus, HypothesisBranch
+from app.modules.clinical_reasoning.schemas.discrimination import (
+    BranchDiscriminationRead,
+    BranchDiscriminationRequest,
+)
+
+
+@router.post("/branch-discrimination", response_model=BranchDiscriminationRead)
+def branch_discrimination(data: BranchDiscriminationRequest):
+    branches = [
+        HypothesisBranch(
+            id=item.id,
+            case_id=item.case_id,
+            title=item.title,
+            description=item.description,
+            root_trigger_ids=item.root_trigger_ids,
+            causal_domain=item.causal_domain,
+            branch_type=item.branch_type,
+            node_ids=item.node_ids,
+            edge_ids=item.edge_ids,
+            supporting_fact_ids=item.supporting_fact_ids,
+            contradicting_fact_ids=item.contradicting_fact_ids,
+            neutral_fact_ids=item.neutral_fact_ids,
+            missing_evidence_ids=item.missing_evidence_ids,
+            evidence_strength=item.evidence_strength,
+            confidence=item.confidence,
+            status=BranchStatus(item.status),
+            provenance=[ProvenanceReference(**p.model_dump()) for p in item.provenance],
+            context_constraints=[ContextConstraint(**constraint) for constraint in item.context_constraints],
+            safety_critical=item.safety_critical,
+        )
+        for item in data.branches
+    ]
+    candidates = [
+        EvidenceCandidate(
+            id=item.id,
+            proposed_data_item=item.proposed_data_item,
+            evidence_type=item.evidence_type,
+            affected_branch_ids=item.affected_branch_ids,
+            effects=[
+                BranchEvidenceEffect(
+                    branch_id=effect.branch_id,
+                    possible_result=effect.possible_result,
+                    effect_type=EvidenceEffectType(effect.effect_type),
+                    expected_strength=effect.expected_strength,
+                )
+                for effect in item.effects
+            ],
+            evidence_reliability=item.evidence_reliability,
+            context_applicability=item.context_applicability,
+            clinical_utility=item.clinical_utility,
+            safety_priority=item.safety_priority,
+            time_sensitivity=item.time_sensitivity,
+            invasiveness=item.invasiveness,
+            cost_burden=item.cost_burden,
+            actionability=item.actionability,
+            provenance=[ProvenanceReference(**p.model_dump()) for p in item.provenance],
+            limitations=item.limitations,
+        )
+        for item in data.candidates
+    ]
+    result = BranchDiscriminationService().evaluate(data.case_id, branches, candidates)
+    return {
+        "case_id": result.case_id,
+        "comparisons": [comparison.__dict__ for comparison in result.comparisons],
+        "ranked_candidates": [candidate.__dict__ for candidate in result.ranked_candidates],
+        "unresolved_branch_pairs": [list(pair) for pair in result.unresolved_branch_pairs],
+        "limitations": result.limitations,
+        "warnings": result.warnings,
+    }

@@ -282,3 +282,65 @@ class PatientCausalityAssessmentORM(Base):
     __table_args__ = (
         UniqueConstraint("patient_id", "episode_id", name="uq_patient_causality_episode"),
     )
+
+
+class BranchComparisonORM(Base):
+    __tablename__ = "branch_comparisons"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    branch_a_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    branch_b_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    shared_fact_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    differentiating_fact_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    conflicting_fact_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    missing_discriminator_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    relationship_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    comparison_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    metric_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("case_id", "branch_a_uid", "branch_b_uid", name="uq_branch_comparison_pair"),
+    )
+
+
+class EvidenceCandidateORM(Base):
+    __tablename__ = "evidence_candidates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_uid: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    proposed_data_item: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    affected_branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    score_inputs: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    information_gain: Mapped[float] = mapped_column(nullable=False)
+    priority_score: Mapped[float] = mapped_column(nullable=False)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class EvidenceCandidateEffectORM(Base):
+    __tablename__ = "evidence_candidate_effects"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(
+        ForeignKey("evidence_candidates.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    branch_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    possible_result: Mapped[str] = mapped_column(Text, nullable=False)
+    effect_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    expected_strength: Mapped[float] = mapped_column(nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "candidate_id", "branch_uid", "possible_result", "effect_type",
+            name="uq_evidence_candidate_effect",
+        ),
+    )
