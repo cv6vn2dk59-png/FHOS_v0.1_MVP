@@ -72,3 +72,28 @@ class HealthRelationRepository(BaseRepository):
 from app.modules.clinical_reasoning.persistence.orm import HealthNodeORM, HealthRelationORM
 RepositoryRegistry.register(HealthNodeORM, HealthNodeRepository)
 RepositoryRegistry.register(HealthRelationORM, HealthRelationRepository)
+
+
+class LaboratoryGraphObservationRepository(BaseRepository):
+    def by_laboratory_result_id(self, laboratory_result_id: int):
+        from app.modules.clinical_reasoning.persistence.orm import LaboratoryGraphObservationORM
+        stmt = select(LaboratoryGraphObservationORM).where(
+            LaboratoryGraphObservationORM.laboratory_result_id == laboratory_result_id
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def for_episode(self, patient_id: str, episode_id: str):
+        from app.modules.clinical_reasoning.persistence.orm import LaboratoryGraphObservationORM
+        stmt = (
+            select(LaboratoryGraphObservationORM)
+            .where(
+                LaboratoryGraphObservationORM.patient_id == patient_id,
+                LaboratoryGraphObservationORM.episode_id == episode_id,
+            )
+            .order_by(LaboratoryGraphObservationORM.laboratory_result_id.asc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
+
+from app.modules.clinical_reasoning.persistence.orm import LaboratoryGraphObservationORM
+RepositoryRegistry.register(LaboratoryGraphObservationORM, LaboratoryGraphObservationRepository)

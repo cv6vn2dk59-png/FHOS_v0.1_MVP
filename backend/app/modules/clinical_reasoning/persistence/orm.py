@@ -111,3 +111,174 @@ class CareTransitionEventORM(Base):
     expected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="scheduled")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class LaboratoryGraphObservationORM(Base):
+    __tablename__ = "laboratory_graph_observations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    laboratory_result_id: Mapped[int] = mapped_column(
+        ForeignKey("laboratory_results.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    patient_node_state_id: Mapped[int] = mapped_column(
+        ForeignKey("patient_node_states.id", ondelete="CASCADE"), nullable=False
+    )
+    patient_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    episode_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    node_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("health_nodes.external_id", ondelete="CASCADE"), nullable=False
+    )
+    test_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    value: Mapped[float | None] = mapped_column()
+    unit: Mapped[str | None] = mapped_column(String(50))
+    reference_min: Mapped[float | None] = mapped_column()
+    reference_max: Mapped[float | None] = mapped_column()
+    critical_low: Mapped[float | None] = mapped_column()
+    critical_high: Mapped[float | None] = mapped_column()
+    interpretation: Mapped[str] = mapped_column(String(30), nullable=False)
+    observation_class: Mapped[str] = mapped_column(String(30), nullable=False)
+    evidence_role: Mapped[str] = mapped_column(String(20), nullable=False)
+    result_date: Mapped[date | None] = mapped_column(Date)
+    provenance: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        Index("ix_lab_graph_observation_patient_episode", "patient_id", "episode_id"),
+    )
+
+class CausalGraphNodeORM(Base):
+    __tablename__ = "causal_graph_nodes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    external_node_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    node_kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    __table_args__ = (UniqueConstraint("case_id", "external_node_id", name="uq_causal_node_case_external"),)
+
+
+class CausalGraphEdgeORM(Base):
+    __tablename__ = "causal_graph_edges"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_node_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_node_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    relation_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    evidence_strength: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float] = mapped_column(nullable=False)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    context_constraints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+
+class HypothesisBranchORM(Base):
+    __tablename__ = "hypothesis_branches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    branch_uid: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    causal_domain: Mapped[str] = mapped_column(String(100), nullable=False)
+    branch_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="generated")
+    root_trigger_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    node_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    edge_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    supporting_fact_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    contradicting_fact_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    neutral_fact_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    missing_evidence_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    evidence_strength: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float] = mapped_column(nullable=False)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    context_constraints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    safety_critical: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class BranchRelationshipORM(Base):
+    __tablename__ = "branch_relationships"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    relationship_uid: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_branch_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_branch_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    relationship_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_strength: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float] = mapped_column(nullable=False)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    context_constraints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+
+class EvidenceSourceORM(Base):
+    __tablename__ = "evidence_sources"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    uri: Mapped[str | None] = mapped_column(Text)
+    publication_type: Mapped[str | None] = mapped_column(String(100))
+    verification_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    evidence_strength: Mapped[str] = mapped_column(String(40), nullable=False)
+    retrieved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class HypothesisEvidenceORM(Base):
+    __tablename__ = "hypothesis_evidence"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    hypothesis_key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    evidence_source_id: Mapped[int] = mapped_column(
+        ForeignKey("evidence_sources.id", ondelete="CASCADE"), nullable=False
+    )
+    patient_fact_id: Mapped[str | None] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(40), nullable=False)
+    weight: Mapped[float] = mapped_column(nullable=False, default=1.0)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "hypothesis_key",
+            "evidence_source_id",
+            "patient_fact_id",
+            "role",
+            name="uq_hypothesis_evidence_assignment",
+        ),
+    )
+
+
+class PatientCausalityAssessmentORM(Base):
+    __tablename__ = "patient_causality_assessments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    episode_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    input_result_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    assessment_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("patient_id", "episode_id", name="uq_patient_causality_episode"),
+    )

@@ -61,3 +61,41 @@ def hypothesis_expansion(data: HypothesisExpansionRequest, uow: UnitOfWork = Dep
         ],
         "devil_review": review,
     }
+
+
+from app.modules.clinical_reasoning.application.laboratory_profile_service import (
+    LaboratoryProfileService,
+    LaboratoryResultsNotFoundError,
+)
+from app.modules.clinical_reasoning.schemas.laboratory_profile import (
+    LaboratoryProfileRead,
+    LaboratoryProfileRequest,
+)
+
+
+@router.post("/laboratory-profile", response_model=LaboratoryProfileRead)
+def laboratory_profile(data: LaboratoryProfileRequest, uow: UnitOfWork = Depends(get_uow)):
+    try:
+        result = LaboratoryProfileService(uow).project(
+            patient_id=data.patient_id,
+            episode_id=data.episode_id,
+            result_ids=data.result_ids,
+            persist=data.persist,
+        )
+    except LaboratoryResultsNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "patient_id": result["patient_id"],
+        "episode_id": result["episode_id"],
+        "observations": [
+            {
+                **observation.__dict__,
+                "observation_class": observation.observation_class.value,
+                "evidence_role": observation.evidence_role.value,
+            }
+            for observation in result["observations"]
+        ],
+        "review_domains": [domain.__dict__ for domain in result["review_domains"]],
+        "devil_review": result["devil_review"],
+    }

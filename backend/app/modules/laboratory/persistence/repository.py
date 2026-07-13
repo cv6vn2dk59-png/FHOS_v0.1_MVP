@@ -43,3 +43,14 @@ class LaboratoryRepository(BaseRepository[LaboratoryResultORM]):
 
 
 RepositoryRegistry.register(LaboratoryResultORM, LaboratoryRepository)
+
+def _get_by_ids(self, result_ids: list[int]) -> list[LaboratoryResultORM]:
+    if not result_ids:
+        return []
+    statement = select(self.model).where(self.model.id.in_(result_ids))
+    rows = list(self.db.execute(statement).scalars().all())
+    order = {result_id: index for index, result_id in enumerate(result_ids)}
+    return sorted(rows, key=lambda row: order.get(row.id, len(order)))
+
+
+LaboratoryRepository.get_by_ids = _get_by_ids
