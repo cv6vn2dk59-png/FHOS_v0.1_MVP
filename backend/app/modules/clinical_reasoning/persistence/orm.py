@@ -344,3 +344,61 @@ class EvidenceCandidateEffectORM(Base):
             name="uq_evidence_candidate_effect",
         ),
     )
+
+
+class ClinicalTimelineEventORM(Base):
+    __tablename__ = "clinical_timeline_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_uid: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    temporal_interval: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    precision: Mapped[str] = mapped_column(String(30), nullable=False, default="unknown")
+    branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    context_json: Mapped[dict] = mapped_column("context", JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class TemporalRelationORM(Base):
+    __tablename__ = "temporal_relations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_event_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_event_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    relation_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    certainty: Mapped[float] = mapped_column(nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    __table_args__ = (UniqueConstraint("case_id", "source_event_uid", "target_event_uid", name="uq_temporal_relation_pair"),)
+
+
+class TemporalConflictORM(Base):
+    __tablename__ = "temporal_conflicts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conflict_uid: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    link_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    conflict_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    source_event_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    target_event_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class MissingTemporalEvidenceORM(Base):
+    __tablename__ = "missing_temporal_evidence"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    missing_uid: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

@@ -178,3 +178,66 @@ def branch_discrimination(data: BranchDiscriminationRequest):
         "limitations": result.limitations,
         "warnings": result.warnings,
     }
+
+
+from datetime import timedelta
+from app.modules.clinical_reasoning.application.temporal_causality_service import TemporalCausalityService
+from app.modules.clinical_reasoning.domain.temporal_causality import (
+    CausalTemporalLink,
+    ClinicalEventKind,
+    ClinicalTimelineEvent,
+    TemporalInterval,
+    TemporalPrecision,
+)
+from app.modules.clinical_reasoning.schemas.temporal_causality import (
+    TemporalCausalityRead,
+    TemporalCausalityRequest,
+)
+
+
+@router.post("/temporal-causality", response_model=TemporalCausalityRead)
+def temporal_causality(data: TemporalCausalityRequest):
+    events = [
+        ClinicalTimelineEvent(
+            id=item.id,
+            case_id=item.case_id,
+            kind=ClinicalEventKind(item.kind),
+            label=item.label,
+            interval=TemporalInterval(
+                earliest_start=item.interval.earliest_start,
+                latest_start=item.interval.latest_start,
+                earliest_end=item.interval.earliest_end,
+                latest_end=item.interval.latest_end,
+                precision=TemporalPrecision(item.interval.precision),
+                timezone=item.interval.timezone,
+            ),
+            provenance=[ProvenanceReference(**p.model_dump()) for p in item.provenance],
+            branch_ids=item.branch_ids,
+            context=item.context,
+        )
+        for item in data.events
+    ]
+    links = [
+        CausalTemporalLink(
+            id=item.id,
+            source_event_id=item.source_event_id,
+            target_event_id=item.target_event_id,
+            relation_type=item.relation_type,
+            provenance=[ProvenanceReference(**p.model_dump()) for p in item.provenance],
+            minimum_lag=timedelta(seconds=item.minimum_lag_seconds) if item.minimum_lag_seconds is not None else None,
+            maximum_lag=timedelta(seconds=item.maximum_lag_seconds) if item.maximum_lag_seconds is not None else None,
+            confidence=item.confidence,
+        )
+        for item in data.causal_links
+    ]
+    result = TemporalCausalityService().evaluate(data.case_id, events, links)
+    return {
+        "case_id": result.case_id,
+        "ordered_event_ids": result.ordered_event_ids,
+        "relations": [{**relation.__dict__, "relation_kind": relation.relation_kind.value} for relation in result.relations],
+        "conflicts": [conflict.__dict__ for conflict in result.conflicts],
+        "missing_evidence": [item.__dict__ for item in result.missing_evidence],
+        "branch_assessments": [item.__dict__ for item in result.branch_assessments],
+        "limitations": result.limitations,
+        "warnings": result.warnings,
+    }
