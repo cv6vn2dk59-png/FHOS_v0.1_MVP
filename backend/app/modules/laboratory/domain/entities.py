@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
@@ -46,7 +46,8 @@ class LaboratoryResult:
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-    critical_threshold_percent: float = field(default=30.0, repr=False, compare=False)
+    critical_low: float | None = None
+    critical_high: float | None = None
     stable_threshold_percent: float = field(default=5.0, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -55,6 +56,13 @@ class LaboratoryResult:
                 raise ValueError(
                     f"reference_min ({self.reference_min}) не може бути більшим за "
                     f"reference_max ({self.reference_max}) для тесту {self.test_name!r}"
+                )
+
+        if self.critical_low is not None and self.critical_high is not None:
+            if self.critical_low > self.critical_high:
+                raise ValueError(
+                    f"critical_low ({self.critical_low}) не може бути більшим за "
+                    f"critical_high ({self.critical_high}) для тесту {self.test_name!r}"
                 )
 
     def has_lower_bound(self) -> bool:
@@ -91,10 +99,19 @@ class LaboratoryResult:
         return round((self.value - boundary) / abs(boundary) * 100, 2)
 
     def is_critical(self) -> bool:
-        deviation = self.deviation_percent()
-        if deviation is None:
+        """Return True only for an explicit analyte-specific critical threshold.
+
+        A large deviation from the reference range is not, by itself, a
+        clinically critical laboratory value. Critical thresholds must be
+        supplied explicitly from a verified laboratory or clinical source.
+        """
+        if self.value is None:
             return False
-        return abs(deviation) >= self.critical_threshold_percent
+        if self.critical_low is not None and self.value < self.critical_low:
+            return True
+        if self.critical_high is not None and self.value > self.critical_high:
+            return True
+        return False
 
     def interpret(self) -> LaboratoryInterpretation:
         if self.value is None or not self.has_reference_range():
@@ -105,14 +122,16 @@ class LaboratoryResult:
             self.interpretation = LaboratoryInterpretation.NORMAL
             return self.interpretation
 
-        is_low = self.has_lower_bound() and self.value < self.reference_min
+        if self.critical_low is not None and self.value < self.critical_low:
+            self.interpretation = LaboratoryInterpretation.CRITICAL_LOW
+            return self.interpretation
 
-        if self.is_critical():
-            self.interpretation = (
-                LaboratoryInterpretation.CRITICAL_LOW if is_low else LaboratoryInterpretation.CRITICAL_HIGH
-            )
-        else:
-            self.interpretation = LaboratoryInterpretation.LOW if is_low else LaboratoryInterpretation.HIGH
+        if self.critical_high is not None and self.value > self.critical_high:
+            self.interpretation = LaboratoryInterpretation.CRITICAL_HIGH
+            return self.interpretation
+
+        is_low = self.has_lower_bound() and self.value < self.reference_min
+        self.interpretation = LaboratoryInterpretation.LOW if is_low else LaboratoryInterpretation.HIGH
 
         return self.interpretation
 

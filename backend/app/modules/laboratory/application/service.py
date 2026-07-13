@@ -1,4 +1,4 @@
-﻿from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError
 
 from app.application.uow import UnitOfWork
 from app.modules.laboratory.application.reference_range_resolver import ReferenceRangeResolver
@@ -67,6 +67,8 @@ class LaboratoryService:
             reference_min=reference_min,
             reference_max=reference_max,
             reference_text=data.reference_text,
+            critical_low=data.critical_low,
+            critical_high=data.critical_high,
             result_date=data.result_date,
             laboratory_name=data.laboratory_name,
             notes=data.notes,

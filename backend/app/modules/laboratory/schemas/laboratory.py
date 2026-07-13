@@ -19,6 +19,8 @@ class LaboratoryResultCreate(BaseModel):
     reference_min: float | None = None
     reference_max: float | None = None
     reference_text: str | None = Field(default=None, max_length=255)
+    critical_low: float | None = None
+    critical_high: float | None = None
     result_date: date | None = None
     laboratory_name: str | None = Field(default=None, max_length=255)
     method: str | None = Field(default=None, max_length=100)
@@ -29,6 +31,9 @@ class LaboratoryResultCreate(BaseModel):
         if self.reference_min is not None and self.reference_max is not None:
             if self.reference_min > self.reference_max:
                 raise ValueError("reference_min не може бути більшим за reference_max")
+        if self.critical_low is not None and self.critical_high is not None:
+            if self.critical_low > self.critical_high:
+                raise ValueError("critical_low не може бути більшим за critical_high")
         return self
 
 
@@ -44,6 +49,8 @@ class LaboratoryResultRead(BaseModel):
     reference_min: float | None
     reference_max: float | None
     reference_text: str | None
+    critical_low: float | None
+    critical_high: float | None
     result_date: date | None
     laboratory_name: str | None
     notes: str | None

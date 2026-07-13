@@ -43,6 +43,9 @@ class LaboratoryResultORM(Base):
     reference_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     reference_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    critical_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    critical_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     result_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
 
     laboratory_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

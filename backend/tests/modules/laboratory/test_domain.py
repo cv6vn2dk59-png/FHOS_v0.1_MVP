@@ -63,17 +63,21 @@ class TestDeviationPercent:
 
 
 class TestIsCritical:
-    def test_small_deviation_is_not_critical(self):
-        result = make_result(value=5.6, reference_min=3.9, reference_max=5.5)
+    def test_out_of_range_without_explicit_threshold_is_not_critical(self):
+        result = make_result(value=10.0, reference_min=3.9, reference_max=5.5)
         assert result.is_critical() is False
 
-    def test_large_deviation_is_critical(self):
-        result = make_result(value=10.0, reference_min=3.9, reference_max=5.5)
+    def test_explicit_critical_low_threshold(self):
+        result = make_result(value=1.0, critical_low=2.0)
         assert result.is_critical() is True
 
-    def test_custom_threshold_is_respected(self):
-        result = make_result(value=6.0, reference_min=4.0, reference_max=5.0, critical_threshold_percent=15.0)
+    def test_explicit_critical_high_threshold(self):
+        result = make_result(value=10.0, critical_high=8.0)
         assert result.is_critical() is True
+
+    def test_value_equal_to_threshold_is_not_critical(self):
+        result = make_result(value=8.0, critical_high=8.0)
+        assert result.is_critical() is False
 
 
 class TestInterpret:
@@ -86,11 +90,29 @@ class TestInterpret:
     def test_high_value(self):
         assert make_result(value=6.0).interpret() == LaboratoryInterpretation.HIGH
 
-    def test_critical_low_value(self):
-        assert make_result(value=1.0).interpret() == LaboratoryInterpretation.CRITICAL_LOW
+    def test_large_deviation_without_explicit_threshold_is_only_low(self):
+        assert make_result(value=1.0).interpret() == LaboratoryInterpretation.LOW
 
-    def test_critical_high_value(self):
-        assert make_result(value=15.0).interpret() == LaboratoryInterpretation.CRITICAL_HIGH
+    def test_large_deviation_without_explicit_threshold_is_only_high(self):
+        assert make_result(value=15.0).interpret() == LaboratoryInterpretation.HIGH
+
+    def test_critical_low_requires_explicit_threshold(self):
+        result = make_result(value=1.0, critical_low=2.0)
+        assert result.interpret() == LaboratoryInterpretation.CRITICAL_LOW
+
+    def test_critical_high_requires_explicit_threshold(self):
+        result = make_result(value=15.0, critical_high=10.0)
+        assert result.interpret() == LaboratoryInterpretation.CRITICAL_HIGH
+
+    def test_triglycerides_regression_is_high_not_critical(self):
+        result = make_result(
+            test_name="Triglycerides",
+            test_code="TRIGLYCERIDES",
+            value=2.3,
+            reference_min=0.0,
+            reference_max=1.7,
+        )
+        assert result.interpret() == LaboratoryInterpretation.HIGH
 
     def test_unknown_when_value_missing(self):
         assert make_result(value=None).interpret() == LaboratoryInterpretation.UNKNOWN
