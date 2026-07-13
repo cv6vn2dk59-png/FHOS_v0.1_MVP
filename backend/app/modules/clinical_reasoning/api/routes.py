@@ -397,3 +397,17 @@ def dynamic_consilium(data: DynamicConsiliumRequest):
         "warnings": result.warnings,
         "limitations": result.limitations,
     }
+
+from app.modules.clinical_reasoning.application.biomechanics_service import BiomechanicsService
+from app.modules.clinical_reasoning.schemas.biomechanics import (
+    BiomechanicsExpansionRead,
+    BiomechanicsExpansionRequest,
+)
+
+
+@router.post("/biomechanics/hip-complex", response_model=BiomechanicsExpansionRead)
+def biomechanics_hip_complex(data: BiomechanicsExpansionRequest):
+    return BiomechanicsService().expand_hip_complex(
+        data.case_id,
+        [item.model_dump() for item in data.facts],
+    )

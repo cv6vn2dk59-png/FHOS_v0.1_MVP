@@ -459,3 +459,32 @@ class DynamicConsiliumReviewORM(Base):
     requested_evidence_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     confidence: Mapped[float] = mapped_column(nullable=False)
     provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+
+class BiomechanicalFactORM(Base):
+    __tablename__ = "biomechanical_facts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fact_uid: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    fact_kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    code: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    value_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    laterality: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    body_region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    context_constraints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class BiomechanicsExpansionORM(Base):
+    __tablename__ = "biomechanics_expansions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    relationship_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    unassigned_fact_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    red_flag_branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    missing_evidence_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    prohibited_conclusions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
