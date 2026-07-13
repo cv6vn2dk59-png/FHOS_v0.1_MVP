@@ -488,3 +488,33 @@ class BiomechanicsExpansionORM(Base):
     limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     prohibited_conclusions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class BiomechanicalExaminationFindingORM(Base):
+    __tablename__ = "biomechanical_examination_findings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    finding_uid: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    finding_kind: Mapped[str] = mapped_column(String(60), nullable=False)
+    code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    result: Mapped[str] = mapped_column(String(30), nullable=False)
+    value_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    body_region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    laterality: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    context_constraints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class BiomechanicalExaminationAssessmentORM(Base):
+    __tablename__ = "biomechanical_examination_assessments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    effect_snapshot: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    branch_assessment_snapshot: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    missing_evidence_snapshot: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    safety_escalation_branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    unassigned_finding_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    prohibited_conclusions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

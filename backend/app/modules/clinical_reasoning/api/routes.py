@@ -411,3 +411,20 @@ def biomechanics_hip_complex(data: BiomechanicsExpansionRequest):
         data.case_id,
         [item.model_dump() for item in data.facts],
     )
+
+from app.modules.clinical_reasoning.application.biomechanical_examination_service import (
+    BiomechanicalExaminationService,
+)
+from app.modules.clinical_reasoning.schemas.biomechanical_examination import (
+    BiomechanicalExaminationRead,
+    BiomechanicalExaminationRequest,
+)
+
+
+@router.post("/biomechanics/examination", response_model=BiomechanicalExaminationRead)
+def biomechanics_examination(data: BiomechanicalExaminationRequest):
+    return BiomechanicalExaminationService().evaluate(
+        data.case_id,
+        [item.model_dump() for item in data.branches],
+        [item.model_dump() for item in data.findings],
+    )
