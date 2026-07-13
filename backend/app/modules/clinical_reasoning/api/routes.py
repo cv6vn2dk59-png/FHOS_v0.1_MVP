@@ -241,3 +241,70 @@ def temporal_causality(data: TemporalCausalityRequest):
         "limitations": result.limitations,
         "warnings": result.warnings,
     }
+
+from app.modules.clinical_reasoning.application.mechanistic_clustering_service import MechanisticClusteringService
+from app.modules.clinical_reasoning.domain.mechanistic_clustering import BranchMechanisticProfile
+from app.modules.clinical_reasoning.schemas.mechanistic_clustering import (
+    MechanisticClusteringRead,
+    MechanisticClusteringRequest,
+)
+
+
+@router.post("/mechanistic-clustering", response_model=MechanisticClusteringRead)
+def mechanistic_clustering(data: MechanisticClusteringRequest):
+    branches = [
+        HypothesisBranch(
+            id=item.id,
+            case_id=item.case_id,
+            title=item.title,
+            description=item.description,
+            root_trigger_ids=item.root_trigger_ids,
+            causal_domain=item.causal_domain,
+            branch_type=item.branch_type,
+            node_ids=item.node_ids,
+            edge_ids=item.edge_ids,
+            supporting_fact_ids=item.supporting_fact_ids,
+            contradicting_fact_ids=item.contradicting_fact_ids,
+            neutral_fact_ids=item.neutral_fact_ids,
+            missing_evidence_ids=item.missing_evidence_ids,
+            evidence_strength=item.evidence_strength,
+            confidence=item.confidence,
+            status=BranchStatus(item.status),
+            provenance=[ProvenanceReference(**p.model_dump()) for p in item.provenance],
+            context_constraints=[ContextConstraint(**constraint) for constraint in item.context_constraints],
+            safety_critical=item.safety_critical,
+        )
+        for item in data.branches
+    ]
+    profiles = [
+        BranchMechanisticProfile(
+            branch_id=item.branch_id,
+            body_systems=item.body_systems,
+            upstream_mechanism_ids=item.upstream_mechanism_ids,
+            downstream_consequence_ids=item.downstream_consequence_ids,
+            risk_factor_ids=item.risk_factor_ids,
+            provenance=[ProvenanceReference(**p.model_dump()) for p in item.provenance],
+            context_constraints=[ContextConstraint(**constraint) for constraint in item.context_constraints],
+        )
+        for item in data.profiles
+    ]
+    result = MechanisticClusteringService().evaluate(data.case_id, branches, profiles)
+    return {
+        "case_id": result.case_id,
+        "clusters": [
+            {
+                **cluster.__dict__,
+                "cluster_type": cluster.cluster_type.value,
+                "provenance": [p.__dict__ for p in cluster.provenance],
+                "context_constraints": [c.__dict__ for c in cluster.context_constraints],
+            }
+            for cluster in result.clusters
+        ],
+        "conflicts": [
+            {**conflict.__dict__, "code": conflict.code.value}
+            for conflict in result.conflicts
+        ],
+        "independent_branch_ids": result.independent_branch_ids,
+        "limitations": result.limitations,
+        "warnings": result.warnings,
+    }

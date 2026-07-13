@@ -402,3 +402,34 @@ class MissingTemporalEvidenceORM(Base):
     rationale: Mapped[str] = mapped_column(Text, nullable=False)
     priority: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class MechanisticClusterORM(Base):
+    __tablename__ = "mechanistic_clusters_v2"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cluster_uid: Mapped[str] = mapped_column(String(180), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    cluster_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    body_systems: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    shared_item_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    evidence_strength: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float] = mapped_column(nullable=False)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    context_constraints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    member_branches_preserved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class MechanisticClusterConflictORM(Base):
+    __tablename__ = "mechanistic_cluster_conflicts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    cluster_uid: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    conflict_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    branch_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
