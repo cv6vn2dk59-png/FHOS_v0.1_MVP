@@ -518,3 +518,27 @@ class BiomechanicalExaminationAssessmentORM(Base):
     limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     prohibited_conclusions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+class BiomechanicalLoadExposureORM(Base):
+    __tablename__ = "biomechanical_load_exposures"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    exposure_uid: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    exposure_kind: Mapped[str] = mapped_column(String(50), nullable=False)
+    code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    exposure_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    context_constraints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+class BiomechanicalLoadAssessmentORM(Base):
+    __tablename__ = "biomechanical_load_assessments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    mismatch_snapshot: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    effect_snapshot: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    branch_assessment_snapshot: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    missing_evidence_snapshot: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    prohibited_conclusions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

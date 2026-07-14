@@ -428,3 +428,16 @@ def biomechanics_examination(data: BiomechanicalExaminationRequest):
         [item.model_dump() for item in data.branches],
         [item.model_dump() for item in data.findings],
     )
+
+from app.modules.clinical_reasoning.application.biomechanical_load_service import BiomechanicalLoadService
+from app.modules.clinical_reasoning.schemas.biomechanical_load import BiomechanicalLoadRead, BiomechanicalLoadRequest
+
+@router.post("/biomechanics/load-adaptation", response_model=BiomechanicalLoadRead)
+def biomechanics_load_adaptation(data: BiomechanicalLoadRequest):
+    return BiomechanicalLoadService().evaluate(
+        data.case_id,
+        [item.model_dump() for item in data.branches],
+        [item.model_dump() for item in data.exposures],
+        data.recovery.model_dump() if data.recovery else None,
+        [item.model_dump() for item in data.responses],
+    )
