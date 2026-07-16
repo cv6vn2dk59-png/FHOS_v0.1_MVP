@@ -67,6 +67,11 @@ from app.modules.clinical_reasoning.application.laboratory_profile_service impor
     LaboratoryProfileService,
     LaboratoryResultsNotFoundError,
 )
+from app.modules.clinical_reasoning.application.consilium_service import StructuredConsiliumService
+from app.modules.clinical_reasoning.schemas.consilium import (
+    StructuredConsiliumRead,
+    StructuredConsiliumRequest,
+)
 from app.modules.clinical_reasoning.schemas.laboratory_profile import (
     LaboratoryProfileRead,
     LaboratoryProfileRequest,
@@ -97,6 +102,63 @@ def laboratory_profile(data: LaboratoryProfileRequest, uow: UnitOfWork = Depends
             for observation in result["observations"]
         ],
         "review_domains": [domain.__dict__ for domain in result["review_domains"]],
+        "devil_review": result["devil_review"],
+    }
+
+
+@router.post("/consilium", response_model=StructuredConsiliumRead)
+def structured_consilium(data: StructuredConsiliumRequest, uow: UnitOfWork = Depends(get_uow)):
+    try:
+        result = StructuredConsiliumService(uow).run(
+            patient_id=data.patient_id,
+            episode_id=data.episode_id,
+            result_ids=data.result_ids,
+            persist=data.persist,
+        )
+    except LaboratoryResultsNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "patient_id": result["patient_id"],
+        "episode_id": result["episode_id"],
+        "observations": [
+            {
+                **observation.__dict__,
+                "observation_class": observation.observation_class.value,
+                "evidence_role": observation.evidence_role.value,
+            }
+            for observation in result["observations"]
+        ],
+        "domain_reports": [
+            {
+                "specialty": report.specialty,
+                "observed_fact_ids": report.observed_fact_ids,
+                "candidate_hypotheses": [
+                    {
+                        "code": hypothesis.code,
+                        "title": hypothesis.title,
+                        "status": hypothesis.status,
+                        "evidence": [
+                            {
+                                "laboratory_result_id": item.laboratory_result_id,
+                                "test_code": item.test_code,
+                                "role": item.role.value,
+                                "rationale": item.rationale,
+                            }
+                            for item in hypothesis.evidence
+                        ],
+                        "missing_evidence": hypothesis.missing_evidence,
+                        "prohibited_conclusions": hypothesis.prohibited_conclusions,
+                    }
+                    for hypothesis in report.candidate_hypotheses
+                ],
+                "questions": report.questions,
+                "confidence": report.confidence,
+                "prohibited_conclusions": report.prohibited_conclusions,
+            }
+            for report in result["domain_reports"]
+        ],
+        "consensus": result["consensus"],
         "devil_review": result["devil_review"],
     }
 

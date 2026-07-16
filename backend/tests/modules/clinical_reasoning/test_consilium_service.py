@@ -1,11 +1,15 @@
 from datetime import date
 
+import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 import app.persistence.model_registry  # noqa: F401
 from app.application.uow import UnitOfWork
+from app.modules.clinical_reasoning.api.routes import structured_consilium
 from app.modules.clinical_reasoning.application.consilium_service import StructuredConsiliumService
+from app.modules.clinical_reasoning.schemas.consilium import StructuredConsiliumRequest
 from app.modules.clinical_reasoning.persistence.orm import EvidenceSourceORM, HypothesisEvidenceORM
 from app.modules.laboratory.persistence.orm import LaboratoryInterpretationORM, LaboratoryResultORM
 from app.persistence.base import Base
@@ -62,3 +66,43 @@ def test_evidence_source_type_is_separate_from_strength_and_idempotent():
         assert sources[0].source_type == "laboratory_result"
         assert sources[0].evidence_strength == "direct_patient_fact"
         assert len(assignments) == 1
+
+
+def test_structured_consilium_route_returns_serialized_payload():
+    with make_uow() as uow:
+        glucose = add_result(uow, "GLUCOSE_FASTING", 7.4, "high", 3.9, 5.5)
+        insulin = add_result(uow, "INSULIN_FASTING", 18.0, "normal", 2.6, 24.9)
+        uow.commit()
+        payload = structured_consilium(
+            StructuredConsiliumRequest(
+                **{
+                    "patient_id": "TEST-001",
+                    "episode_id": "ep-1",
+                    "result_ids": [glucose.id, insulin.id],
+                    "persist": True,
+                }
+            ),
+            uow,
+        )
+
+        assert payload["patient_id"] == "TEST-001"
+        assert payload["domain_reports"][0]["specialty"] == "endocrinology"
+        assert payload["domain_reports"][0]["candidate_hypotheses"][0]["evidence"][0]["role"] == "supporting"
+        assert payload["devil_review"]["checks"]["diagnosis_auto_confirmation_blocked"] is True
+
+
+def test_structured_consilium_route_returns_404_for_missing_laboratory_results():
+    with make_uow() as uow:
+        with pytest.raises(HTTPException) as exc:
+            structured_consilium(
+                StructuredConsiliumRequest(
+                    patient_id="TEST-001",
+                    episode_id="ep-1",
+                    result_ids=[99999],
+                    persist=True,
+                ),
+                uow,
+            )
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == "Laboratory results not found: [99999]"
