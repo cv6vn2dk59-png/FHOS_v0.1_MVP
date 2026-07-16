@@ -55,3 +55,42 @@ def test_closed_branch_without_contradiction_is_rejected_by_guard():
         status=BranchStatus.CLOSED, provenance=p(),
     )
     assert "branch_closed_without_evidence:b" in DominanceGuard().evaluate([branch])
+
+
+# --- FHOS-RULE-R-14: поріг закриття небезпечної гілки ---------------------
+
+def _closed_dangerous_branch(evidence_strength="plausible", clinician_confirmed=False):
+    return HypothesisBranch(
+        id="danger", case_id="c", title="t", description="candidate", root_trigger_ids=["f"],
+        causal_domain="metabolic", branch_type="primary_mechanistic", node_ids=["f", "m"], edge_ids=["e"],
+        status=BranchStatus.CLOSED, provenance=p(), contradicting_fact_ids=["fact:1"],
+        safety_critical=True, evidence_strength=evidence_strength, clinician_confirmed=clinician_confirmed,
+    )
+
+
+def test_safety_critical_branch_closed_below_threshold_is_rejected():
+    branch = _closed_dangerous_branch(evidence_strength="plausible")
+    assert "unsafe_branch_closed_below_threshold:danger" in DominanceGuard().evaluate([branch])
+
+
+def test_safety_critical_branch_closed_at_threshold_is_accepted():
+    branch = _closed_dangerous_branch(evidence_strength="supported")
+    violations = DominanceGuard().evaluate([branch])
+    assert "unsafe_branch_closed_below_threshold:danger" not in violations
+
+
+def test_safety_critical_branch_closed_with_clinician_confirmation_is_accepted():
+    branch = _closed_dangerous_branch(evidence_strength="speculative", clinician_confirmed=True)
+    violations = DominanceGuard().evaluate([branch])
+    assert "unsafe_branch_closed_below_threshold:danger" not in violations
+
+
+def test_non_safety_critical_branch_closed_below_threshold_is_not_flagged_by_r14():
+    branch = HypothesisBranch(
+        id="benign", case_id="c", title="t", description="candidate", root_trigger_ids=["f"],
+        causal_domain="metabolic", branch_type="primary_mechanistic", node_ids=["f", "m"], edge_ids=["e"],
+        status=BranchStatus.CLOSED, provenance=p(), contradicting_fact_ids=["fact:1"],
+        safety_critical=False, evidence_strength="plausible",
+    )
+    violations = DominanceGuard().evaluate([branch])
+    assert "unsafe_branch_closed_below_threshold:benign" not in violations

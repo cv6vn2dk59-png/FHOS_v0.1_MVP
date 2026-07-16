@@ -5,6 +5,10 @@ from enum import Enum
 from typing import Iterable
 
 from .causality import CausalPath, ContextConstraint, ProvenanceReference
+from .rule_passport import (
+    DEFAULT_DANGEROUS_BRANCH_CLOSURE_THRESHOLD,
+    meets_closure_threshold,
+)
 
 
 class BranchStatus(str, Enum):
@@ -58,6 +62,10 @@ class HypothesisBranch:
     provenance: list[ProvenanceReference] = field(default_factory=list)
     context_constraints: list[ContextConstraint] = field(default_factory=list)
     safety_critical: bool = False
+    # FHOS-RULE-R-14: явне підтвердження лікаря, що дозволяє закрити
+    # гілку навіть якщо evidence_strength не сягає автоматичного порогу.
+    # За замовчуванням False -- підтвердження ніколи не мовчазне.
+    clinician_confirmed: bool = False
 
     def __post_init__(self) -> None:
         if not self.provenance:
@@ -135,7 +143,12 @@ class HypothesisExpansionResult:
 
 
 class DominanceGuard:
-    def evaluate(self, branches: list[HypothesisBranch], clusters: list[MechanisticCluster] | None = None) -> list[str]:
+    def evaluate(
+        self,
+        branches: list[HypothesisBranch],
+        clusters: list[MechanisticCluster] | None = None,
+        dangerous_branch_closure_threshold: str = DEFAULT_DANGEROUS_BRANCH_CLOSURE_THRESHOLD,
+    ) -> list[str]:
         violations: list[str] = []
         if not branches:
             return ["single_branch_without_alternatives: no branches generated"]
@@ -148,6 +161,14 @@ class DominanceGuard:
             seen[branch.independence_key] = branch.id
             if branch.status == BranchStatus.CLOSED and not branch.contradicting_fact_ids:
                 violations.append(f"branch_closed_without_evidence:{branch.id}")
+            if branch.status == BranchStatus.CLOSED and branch.safety_critical and not meets_closure_threshold(
+                branch.evidence_strength, branch.clinician_confirmed, dangerous_branch_closure_threshold
+            ):
+                # FHOS-RULE-R-14: небезпечна (safety_critical) гілка не
+                # закривається лише на основі низької апріорної ймовірності
+                # чи слабких доказів -- потрібен поріг evidence_strength
+                # або явне підтвердження лікаря (інваріант 8, FHOS-DEC-2-2).
+                violations.append(f"unsafe_branch_closed_below_threshold:{branch.id}")
             if not branch.provenance:
                 violations.append(f"missing_provenance:{branch.id}")
         branch_ids = {b.id for b in branches}

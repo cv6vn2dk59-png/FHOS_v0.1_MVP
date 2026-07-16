@@ -2,7 +2,12 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from app.modules.clinical_reasoning.persistence.orm import ConsentEnvelopeORM, GuardianAuthorityORM, PatientNodeStateORM
+from app.modules.clinical_reasoning.persistence.orm import (
+    ConsentEnvelopeORM,
+    GuardianAuthorityORM,
+    PatientNodeStateORM,
+    RulePassportORM,
+)
 from app.repositories.base import BaseRepository
 from app.repositories.registry import RepositoryRegistry
 
@@ -45,6 +50,24 @@ RepositoryRegistry.register(ConsentEnvelopeORM, ConsentEnvelopeRepository)
 RepositoryRegistry.register(PatientNodeStateORM, PatientNodeStateRepository)
 
 RepositoryRegistry.register(GuardianAuthorityORM, GuardianAuthorityRepository)
+
+
+class RulePassportRepository(BaseRepository[RulePassportORM]):
+    """FHOS-RULE-R-11: пошук паспорта клінічного правила за rule_id."""
+
+    def by_rule_id(self, rule_id: str) -> list[RulePassportORM]:
+        stmt = select(self.model).where(self.model.rule_id == rule_id).order_by(self.model.version.desc())
+        return list(self.db.execute(stmt).scalars().all())
+
+    def active_by_rule_id(self, rule_id: str) -> RulePassportORM | None:
+        stmt = select(self.model).where(
+            self.model.rule_id == rule_id,
+            self.model.status == "active",
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+
+RepositoryRegistry.register(RulePassportORM, RulePassportRepository)
 
 
 class HealthNodeRepository(BaseRepository):

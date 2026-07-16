@@ -199,8 +199,40 @@ class HypothesisBranchORM(Base):
     provenance: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     context_constraints: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     safety_critical: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # FHOS-RULE-R-14: явне підтвердження лікаря для закриття гілки нижче
+    # автоматичного порогу evidence_strength (DominanceGuard).
+    clinician_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+class RulePassportORM(Base):
+    """FHOS-RULE-R-11: паспорт клінічного правила -- rule_id, версія,
+    статус, source_type, evidence_strength, обмеження. Окрема сутність
+    від EvidenceSourceORM (те описує ОДНЕ джерело, це -- ПРАВИЛО, яке
+    система застосовує в reasoning runtime)."""
+
+    __tablename__ = "rule_passports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rule_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    version: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    source_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    evidence_strength: Mapped[str] = mapped_column(String(40), nullable=False)
+    limitations: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("rule_id", "version", name="uq_rule_passport_id_version"),
+    )
 
 
 class BranchRelationshipORM(Base):
