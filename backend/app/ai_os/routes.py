@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from app.ai_os.service import (
     ai_os_status,
     process_request,
+    runtime_test_request,
 )
 
 router = APIRouter()
@@ -28,15 +29,8 @@ def demo():
 @router.get("/ask")
 def ask(request: str):
     return process_request(request)
+
+
 @router.get("/runtime-test")
-async def runtime_test():
-    return {
-        "status": "ok",
-        "provider": "openai",
-        "runtime": "working",
-        "response": {
-            "provider": "openai",
-            "model": "placeholder",
-            "content": "AI Runtime placeholder працює",
-        },
-    }
+async def runtime_test(provider: str = "auto"):
+    return await runtime_test_request(provider)

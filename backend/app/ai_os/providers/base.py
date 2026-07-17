@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 
 
 class BaseProvider(ABC):
-
     @abstractmethod
     async def generate(
         self,
@@ -14,4 +13,4 @@ class BaseProvider(ABC):
         user_prompt: str,
         temperature: float = 0.2,
     ) -> dict:
-        pass
+        """Generate a placeholder provider response."""
