@@ -574,3 +574,57 @@ class BiomechanicalLoadAssessmentORM(Base):
     limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     prohibited_conclusions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class MultiAIConsiliumRunORM(Base):
+    __tablename__ = "multi_ai_consilium_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    case_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    execution_mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    requested_provider_codes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    successful_provider_codes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    failed_provider_codes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    case_package: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    clinical_graph_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    comparison_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    devil_review_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    consensus_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    warnings: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    limitations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    violations: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    clinical_graph_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    normalization_schema_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    comparison_algorithm_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    consensus_algorithm_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    round_one_input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class MultiAIConsiliumParticipantORM(Base):
+    __tablename__ = "multi_ai_consilium_participants"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("multi_ai_consilium_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    provider_code: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    round_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    independent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_response: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    normalized_response: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_mock: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

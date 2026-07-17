@@ -5,6 +5,8 @@ from sqlalchemy import select
 from app.modules.clinical_reasoning.persistence.orm import (
     ConsentEnvelopeORM,
     GuardianAuthorityORM,
+    MultiAIConsiliumParticipantORM,
+    MultiAIConsiliumRunORM,
     PatientNodeStateORM,
     RulePassportORM,
 )
@@ -68,6 +70,16 @@ class RulePassportRepository(BaseRepository[RulePassportORM]):
 
 
 RepositoryRegistry.register(RulePassportORM, RulePassportRepository)
+
+
+class MultiAIConsiliumRunRepository(BaseRepository[MultiAIConsiliumRunORM]):
+    def by_run_id(self, run_id: str) -> MultiAIConsiliumRunORM | None:
+        stmt = select(self.model).where(self.model.run_id == run_id)
+        return self.db.execute(stmt).scalar_one_or_none()
+
+
+RepositoryRegistry.register(MultiAIConsiliumRunORM, MultiAIConsiliumRunRepository)
+RepositoryRegistry.register(MultiAIConsiliumParticipantORM, BaseRepository)
 
 
 class HealthNodeRepository(BaseRepository):

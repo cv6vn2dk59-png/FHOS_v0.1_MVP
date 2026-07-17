@@ -372,6 +372,12 @@ def mechanistic_clustering(data: MechanisticClusteringRequest):
     }
 
 from app.modules.clinical_reasoning.application.dynamic_consilium_service import DynamicConsiliumService
+from app.modules.clinical_reasoning.application.knee_consilium_demo_service import (
+    KneePainConsiliumDemoService,
+)
+from app.modules.clinical_reasoning.application.multi_ai_consilium_service import (
+    MultiAIConsiliumService,
+)
 from app.modules.clinical_reasoning.domain.dynamic_consilium import (
     BranchReview,
     ConsiliumRole,
@@ -381,6 +387,34 @@ from app.modules.clinical_reasoning.schemas.dynamic_consilium import (
     DynamicConsiliumRead,
     DynamicConsiliumRequest,
 )
+from app.modules.clinical_reasoning.schemas.multi_ai_consilium import (
+    MultiAIConsiliumRead,
+    MultiAIConsiliumRequest,
+)
+
+
+def _serialize_dynamic_consilium_result(result) -> dict:
+    return {
+        "case_id": result.case_id,
+        "branch_reviews": [
+            {
+                **review.__dict__,
+                "position": review.position.value,
+                "provenance": [p.__dict__ for p in review.provenance],
+            }
+            for review in result.branch_reviews
+        ],
+        "consensus": {
+            **result.consensus.__dict__,
+            "minority_opinions": [
+                {**item.__dict__, "position": item.position.value}
+                for item in result.consensus.minority_opinions
+            ],
+        },
+        "violations": [violation.__dict__ for violation in result.violations],
+        "warnings": result.warnings,
+        "limitations": result.limitations,
+    }
 
 
 @router.post("/dynamic-consilium", response_model=DynamicConsiliumRead)
@@ -438,27 +472,46 @@ def dynamic_consilium(data: DynamicConsiliumRequest):
         reviews,
         data.cluster_branch_ids,
     )
+    return _serialize_dynamic_consilium_result(result)
+
+
+@router.get("/demo/knee-consilium")
+def demo_knee_consilium():
+    payload = KneePainConsiliumDemoService().build()
     return {
-        "case_id": result.case_id,
-        "branch_reviews": [
+        "case_id": payload["case_id"],
+        "symptom": payload["symptom"],
+        "branches": [
             {
-                **review.__dict__,
-                "position": review.position.value,
-                "provenance": [p.__dict__ for p in review.provenance],
+                "id": branch.id,
+                "title": branch.title,
+                "description": branch.description,
+                "causal_domain": branch.causal_domain,
+                "branch_type": branch.branch_type,
+                "supporting_fact_ids": branch.supporting_fact_ids,
+                "missing_evidence_ids": branch.missing_evidence_ids,
+                "evidence_strength": branch.evidence_strength,
+                "status": branch.status.value,
+                "safety_critical": branch.safety_critical,
             }
-            for review in result.branch_reviews
+            for branch in payload["branches"]
         ],
-        "consensus": {
-            **result.consensus.__dict__,
-            "minority_opinions": [
-                {**item.__dict__, "position": item.position.value}
-                for item in result.consensus.minority_opinions
-            ],
-        },
-        "violations": [violation.__dict__ for violation in result.violations],
-        "warnings": result.warnings,
-        "limitations": result.limitations,
+        "roles": [
+            {
+                "code": role.code,
+                "title": role.title,
+                "focus_domains": role.focus_domains,
+                "devil_role": role.devil_role,
+            }
+            for role in payload["roles"]
+        ],
+        "consilium": _serialize_dynamic_consilium_result(payload["result"]),
     }
+
+
+@router.post("/multi-ai-consilium", response_model=MultiAIConsiliumRead)
+async def multi_ai_consilium(data: MultiAIConsiliumRequest, uow: UnitOfWork = Depends(get_uow)):
+    return await MultiAIConsiliumService(uow).run(data)
 
 from app.modules.clinical_reasoning.application.biomechanics_service import BiomechanicsService
 from app.modules.clinical_reasoning.schemas.biomechanics import (
