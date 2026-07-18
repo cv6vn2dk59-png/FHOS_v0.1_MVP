@@ -32,5 +32,5 @@ def ask(request: str):
 
 
 @router.get("/runtime-test")
-async def runtime_test(provider: str = "auto"):
-    return await runtime_test_request(provider)
+async def runtime_test(provider: str = "auto", execution_mode: str = "mock"):
+    return await runtime_test_request(provider, execution_mode)

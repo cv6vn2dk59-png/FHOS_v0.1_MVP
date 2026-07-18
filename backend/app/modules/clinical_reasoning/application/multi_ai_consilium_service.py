@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -29,14 +30,14 @@ from app.modules.clinical_reasoning.persistence.orm import (
 from app.modules.clinical_reasoning.schemas.multi_ai_consilium import MultiAIConsiliumRequest
 
 
-PROMPT_VERSION = "multi-ai-consilium.v1"
-NORMALIZATION_SCHEMA_VERSION = "normalized-clinical-opinion.v1"
-COMPARISON_ALGORITHM_VERSION = "multi-ai-comparison.v1"
-CONSENSUS_ALGORITHM_VERSION = "multi-ai-consilium-consensus.v1"
+SYSTEM_PROMPT_VERSION = "multi-ai-system.v1"
+ROUND_ONE_PROMPT_VERSION = "multi-ai-round-one.v1"
+ROUND_TWO_PROMPT_VERSION = "multi-ai-round-two.v1"
+DEVIL_PROMPT_VERSION = "multi-ai-devil.v1"
+NORMALIZATION_SCHEMA_VERSION = "normalized-clinical-opinion.v2"
+COMPARISON_ALGORITHM_VERSION = "multi-ai-comparison.v2"
+CONSENSUS_ALGORITHM_VERSION = "multi-ai-consilium-consensus.v2"
 CLINICAL_GRAPH_VERSION = "deterministic-fhos-knee.v1"
-EXECUTION_MODE = "mock"
-PROVIDER_EXECUTION_STATUS = "mock_only"
-REAL_PROVIDER_CALLS = False
 
 
 @dataclass(frozen=True)
@@ -51,12 +52,21 @@ class NormalizedClinicalOpinion:
     limitations: list[str]
     confidence_statement: str
     is_mock: bool = True
+    supported_branch_ids: list[str] = field(default_factory=list)
+    challenged_branch_ids: list[str] = field(default_factory=list)
+    proposed_branches: list[dict] = field(default_factory=list)
+    minority_opinions: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
+        supported_branch_ids = self.supported_branch_ids or [item["id"] for item in self.hypotheses]
         return {
             "provider_code": self.provider_code,
             "hypotheses": self.hypotheses,
             "leading_hypothesis_ids": self.leading_hypothesis_ids,
+            "supported_branch_ids": supported_branch_ids,
+            "challenged_branch_ids": self.challenged_branch_ids,
+            "proposed_branches": self.proposed_branches,
+            "minority_opinions": self.minority_opinions,
             "safety_critical_hypothesis_ids": self.safety_critical_hypothesis_ids,
             "missing_evidence_ids": self.missing_evidence_ids,
             "recommended_checks": self.recommended_checks,
@@ -79,8 +89,12 @@ class MultiAIConsiliumService:
         self.consilium_service = consilium_service or DynamicConsiliumService()
 
     async def run(self, data: MultiAIConsiliumRequest) -> dict:
+        execution_mode = self._requested_execution_mode(data)
+        consensus_mode = self._consensus_mode(data)
+        self._validate_request(data, execution_mode)
+
         run_id = f"multi-ai:{uuid4()}"
-        case_package = self._build_case_package(data)
+        case_package = self._build_case_package(data, execution_mode)
         clinical_graph = self._build_clinical_graph(data)
 
         round_one = await self._run_round(
@@ -89,6 +103,9 @@ class MultiAIConsiliumService:
             provider_codes=data.provider_codes,
             case_package=case_package,
             clinical_graph=clinical_graph,
+            execution_mode=execution_mode,
+            timeout_seconds=data.timeout_seconds,
+            max_retries=data.max_retries,
             forced_failures=set(data.forced_failure_provider_codes),
             forced_invalid_normalization=set(data.forced_invalid_normalization_provider_codes),
         )
@@ -99,7 +116,7 @@ class MultiAIConsiliumService:
 
         rounds = [round_one]
         latest_responses = round_one["responses"]
-        if data.require_independent_round and self._successful_count(latest_responses) >= 2:
+        if self._require_round_two(data) and self._successful_count(latest_responses) >= 2:
             round_two = await self._run_round(
                 round_number=2,
                 independent=False,
@@ -110,6 +127,9 @@ class MultiAIConsiliumService:
                 ],
                 case_package=case_package,
                 clinical_graph=clinical_graph,
+                execution_mode=execution_mode,
+                timeout_seconds=data.timeout_seconds,
+                max_retries=data.max_retries,
                 comparison=comparison,
                 forced_failures=set(),
                 forced_invalid_normalization=set(),
@@ -117,18 +137,33 @@ class MultiAIConsiliumService:
             rounds.append(round_two)
             latest_responses = round_two["responses"]
 
+        provider_execution_status = self._provider_execution_status(round_one["responses"])
+        successful_providers = [
+            item["provider_code"]
+            for item in round_one["responses"]
+            if item["status"] == "completed" and item["normalized_response"] is not None
+        ]
+        failed_providers = [
+            item["provider_code"]
+            for item in round_one["responses"]
+            if item["status"] != "completed" or item["normalized_response"] is None
+        ]
+
         consensus = self._build_consensus(
-            data=data,
             clinical_graph=clinical_graph,
             participant_results=latest_responses,
             comparison=comparison,
+            consensus_mode=consensus_mode,
+            minimum_successful_providers=data.minimum_successful_providers,
+            requested_provider_count=len(data.provider_codes),
         )
         devil_review = self._build_devil_review(
-            data=data,
-            clinical_graph=clinical_graph,
+            requested_provider_codes=data.provider_codes,
+            rounds=rounds,
             comparison=comparison,
             consensus=consensus,
-            rounds=rounds,
+            execution_mode=execution_mode,
+            provider_execution_status=provider_execution_status,
         ) if data.require_devil_review else {
             "status": "skipped",
             "checks": {},
@@ -144,7 +179,6 @@ class MultiAIConsiliumService:
         limitations = sorted({
             *clinical_graph["limitations"],
             *consensus["limitations"],
-            "Mock provider normalization is explicitly marked with is_mock=true until real provider JSON outputs are enabled.",
         })
         violations = list(consensus["violations"])
         if devil_review.get("status") == "failed":
@@ -153,11 +187,14 @@ class MultiAIConsiliumService:
         participants = [
             {
                 "provider_code": response["provider_code"],
-                "model": response["model"],
+                "provider_model": response["provider_model"],
+                "execution_mode": response["execution_mode"],
                 "status": response["status"],
                 "latency_ms": response["latency_ms"],
                 "is_mock": response["is_mock"],
+                "real_provider_call": response["real_provider_call"],
                 "fallback_used": response["fallback_used"],
+                "usage": response["usage"],
             }
             for response in round_one["responses"]
         ]
@@ -165,11 +202,19 @@ class MultiAIConsiliumService:
         payload = {
             "run_id": run_id,
             "case_id": data.case_id,
-            "execution_mode": EXECUTION_MODE,
-            "is_mock": True,
-            "real_provider_calls": REAL_PROVIDER_CALLS,
+            "execution_mode": execution_mode,
+            "is_mock": provider_execution_status != "real_only",
+            "real_provider_calls": any(
+                response["real_provider_call"]
+                for round_payload in rounds
+                for response in round_payload["responses"]
+            ),
             "orchestration_status": "completed",
-            "provider_execution_status": PROVIDER_EXECUTION_STATUS,
+            "provider_execution_status": provider_execution_status,
+            "requested_providers": list(data.provider_codes),
+            "executed_providers": [response["provider_code"] for response in round_one["responses"]],
+            "successful_providers": successful_providers,
+            "failed_providers": failed_providers,
             "participants": participants,
             "rounds": rounds,
             "clinical_graph": clinical_graph,
@@ -182,19 +227,42 @@ class MultiAIConsiliumService:
         }
         self._persist_run(
             run_id=run_id,
-            data=data,
             case_package=case_package,
             payload=payload,
         )
         return payload
 
     @staticmethod
+    def _requested_execution_mode(data: MultiAIConsiliumRequest) -> str:
+        value = (data.execution_mode or "mock").strip().lower()
+        if value not in {"mock", "real", "mixed"}:
+            raise ValueError("execution_mode must be one of: mock, real, mixed")
+        return value
+
+    @staticmethod
+    def _consensus_mode(data: MultiAIConsiliumRequest) -> str:
+        value = data.mode or data.consensus_mode or "demo"
+        return value.strip().lower()
+
+    @staticmethod
+    def _require_round_two(data: MultiAIConsiliumRequest) -> bool:
+        if data.require_independent_round is not None:
+            return data.require_independent_round
+        return data.require_round_two
+
+    @staticmethod
     def _is_knee_case_text(value: str) -> bool:
         lowered = value.lower()
         return "коліно" in lowered or "knee" in lowered
 
-    def _build_case_package(self, data: MultiAIConsiliumRequest) -> dict:
-        return {
+    def _validate_request(self, data: MultiAIConsiliumRequest, execution_mode: str) -> None:
+        if any(provider.strip().lower() == "auto" for provider in data.provider_codes):
+            raise ValueError("provider_codes must be explicit. 'auto' is not allowed for multi-AI runs.")
+        if execution_mode == "real" and data.allow_fallback:
+            raise ValueError("allow_fallback is not supported in real multi-AI runs yet.")
+
+    def _build_case_package(self, data: MultiAIConsiliumRequest, execution_mode: str) -> dict:
+        payload = {
             "case_id": data.case_id,
             "case_text": data.case_text,
             "clinical_context": data.clinical_context,
@@ -204,11 +272,15 @@ class MultiAIConsiliumService:
             "missing_evidence_ids": data.missing_evidence_ids,
             "safety_constraints": data.safety_constraints,
             "timeout_seconds": data.timeout_seconds,
-            "prompt_version": PROMPT_VERSION,
+            "execution_mode": execution_mode,
+            "system_prompt_version": SYSTEM_PROMPT_VERSION,
+            "round_one_prompt_version": ROUND_ONE_PROMPT_VERSION,
+            "round_two_prompt_version": ROUND_TWO_PROMPT_VERSION,
+            "devil_prompt_version": DEVIL_PROMPT_VERSION,
             "normalization_schema_version": NORMALIZATION_SCHEMA_VERSION,
-            "execution_mode": EXECUTION_MODE,
-            "real_provider_calls": REAL_PROVIDER_CALLS,
         }
+        payload["case_package_hash"] = self._hash_payload(payload)
+        return payload
 
     def _build_clinical_graph(self, data: MultiAIConsiliumRequest) -> dict:
         if self._is_knee_case_text(data.case_text):
@@ -277,6 +349,9 @@ class MultiAIConsiliumService:
         provider_codes: list[str],
         case_package: dict,
         clinical_graph: dict,
+        execution_mode: str,
+        timeout_seconds: int,
+        max_retries: int,
         forced_failures: set[str],
         forced_invalid_normalization: set[str],
         comparison: dict | None = None,
@@ -289,79 +364,172 @@ class MultiAIConsiliumService:
             "independent": independent,
         }
         input_hash = self._hash_payload(round_input)
-        serialized_input = json.dumps(round_input, ensure_ascii=False, sort_keys=True)
+        system_prompt = self._system_prompt(round_number)
+        user_prompt = json.dumps(round_input, ensure_ascii=False, sort_keys=True)
+        prompt_hash = self._hash_text(system_prompt + "\n" + user_prompt)
+        prompt_version = ROUND_ONE_PROMPT_VERSION if round_number == 1 else ROUND_TWO_PROMPT_VERSION
 
-        responses: list[dict] = []
-        for provider_code in provider_codes:
-            started_at = datetime.now(timezone.utc)
-            if provider_code in forced_failures:
-                completed_at = datetime.now(timezone.utc)
-                responses.append({
-                    "provider_code": provider_code,
-                    "model": "placeholder",
-                    "round": round_number,
-                    "independent": independent,
-                    "prompt_version": PROMPT_VERSION,
-                    "input_hash": input_hash,
-                    "raw_response": None,
-                    "normalized_response": None,
-                    "started_at": started_at.isoformat(),
-                    "completed_at": completed_at.isoformat(),
-                    "latency_ms": self._latency_ms(started_at, completed_at),
-                    "is_mock": True,
-                    "status": "failed",
-                    "error": "forced_failure_for_test",
-                    "fallback_used": False,
-                    "warnings": [],
-                })
-                continue
-
-            raw_response = await self.runtime.execute(
-                provider=provider_code,
-                system_prompt=self._system_prompt(),
-                user_prompt=serialized_input,
-                temperature=0.2,
+        tasks = [
+            self._run_provider(
+                provider_code=provider_code,
+                round_number=round_number,
+                independent=independent,
+                case_package=case_package,
+                clinical_graph=clinical_graph,
+                requested_execution_mode=execution_mode,
+                timeout_seconds=timeout_seconds,
+                max_retries=max_retries,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                input_hash=input_hash,
+                prompt_hash=prompt_hash,
+                prompt_version=prompt_version,
+                force_failure=provider_code in forced_failures,
+                force_invalid_normalization=provider_code in forced_invalid_normalization,
             )
-            completed_at = datetime.now(timezone.utc)
-            response = {
+            for provider_code in provider_codes
+        ]
+        responses = await asyncio.gather(*tasks)
+        return {
+            "round": round_number,
+            "independent": independent,
+            "input_hash": input_hash,
+            "prompt_hash": prompt_hash,
+            "prompt_version": prompt_version,
+            "responses": responses,
+        }
+
+    async def _run_provider(
+        self,
+        *,
+        provider_code: str,
+        round_number: int,
+        independent: bool,
+        case_package: dict,
+        clinical_graph: dict,
+        requested_execution_mode: str,
+        timeout_seconds: int,
+        max_retries: int,
+        system_prompt: str,
+        user_prompt: str,
+        input_hash: str,
+        prompt_hash: str,
+        prompt_version: str,
+        force_failure: bool,
+        force_invalid_normalization: bool,
+    ) -> dict:
+        actual_execution_mode = self._resolve_provider_execution_mode(
+            provider_code,
+            requested_execution_mode,
+        )
+        if force_failure:
+            now = datetime.now(timezone.utc).isoformat()
+            return {
                 "provider_code": provider_code,
-                "model": raw_response.get("model", "placeholder"),
+                "provider_model": "placeholder",
+                "execution_mode": actual_execution_mode,
                 "round": round_number,
                 "independent": independent,
-                "prompt_version": PROMPT_VERSION,
+                "prompt_version": prompt_version,
                 "input_hash": input_hash,
-                "raw_response": raw_response,
+                "prompt_hash": prompt_hash,
+                "raw_response": None,
                 "normalized_response": None,
-                "started_at": started_at.isoformat(),
-                "completed_at": completed_at.isoformat(),
-                "latency_ms": self._latency_ms(started_at, completed_at),
-                "is_mock": True,
-                "status": "completed",
-                "error": None,
+                "started_at": now,
+                "completed_at": now,
+                "latency_ms": 0,
+                "is_mock": actual_execution_mode != "real",
+                "real_provider_call": False,
+                "status": "failed",
+                "error": "forced_failure_for_test",
+                "error_code": "forced_failure_for_test",
+                "error_message": "forced_failure_for_test",
                 "fallback_used": False,
+                "attempt_count": 0,
+                "usage": None,
                 "warnings": [],
             }
-            if provider_code in forced_invalid_normalization:
-                response["status"] = "normalization_failed"
-                response["error"] = "mock_normalization_failed"
-                response["warnings"].append(
-                    f"normalization_failed:{provider_code}:repair_attempt_exhausted"
-                )
-            else:
+
+        runtime_result = await self.runtime.execute(
+            provider=provider_code,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.2,
+            execution_mode=actual_execution_mode,
+            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+        )
+        response = {
+            "provider_code": provider_code,
+            "provider_model": runtime_result.get("model", "placeholder"),
+            "execution_mode": actual_execution_mode,
+            "round": round_number,
+            "independent": independent,
+            "prompt_version": prompt_version,
+            "input_hash": input_hash,
+            "prompt_hash": prompt_hash,
+            "raw_response": runtime_result.get("raw_response"),
+            "normalized_response": None,
+            "started_at": runtime_result.get("started_at"),
+            "completed_at": runtime_result.get("completed_at"),
+            "latency_ms": runtime_result.get("latency_ms", 0),
+            "is_mock": runtime_result.get("is_mock", actual_execution_mode != "real"),
+            "real_provider_call": runtime_result.get("real_provider_call", False),
+            "status": runtime_result.get("status", "failed"),
+            "error": runtime_result.get("error_message"),
+            "error_code": runtime_result.get("error_code"),
+            "error_message": runtime_result.get("error_message"),
+            "fallback_used": runtime_result.get("fallback_used", False),
+            "attempt_count": runtime_result.get("attempt_count", 0),
+            "usage": runtime_result.get("usage"),
+            "warnings": [],
+        }
+        if response["status"] != "completed":
+            return response
+
+        if force_invalid_normalization:
+            response["status"] = "normalization_failed"
+            response["error"] = "mock_normalization_failed"
+            response["error_code"] = "mock_normalization_failed"
+            response["error_message"] = "mock_normalization_failed"
+            response["warnings"].append(
+                f"normalization_failed:{provider_code}:repair_attempt_exhausted"
+            )
+            return response
+
+        try:
+            if response["is_mock"]:
                 normalized = self._mock_normalized_opinion(
                     provider_code=provider_code,
                     clinical_graph=clinical_graph,
                     round_number=round_number,
                 )
-                response["normalized_response"] = normalized.as_dict()
-            responses.append(response)
+            else:
+                normalized = self._normalize_real_response(
+                    provider_code=provider_code,
+                    content=runtime_result.get("content", ""),
+                    clinical_graph=clinical_graph,
+                )
+            response["normalized_response"] = normalized.as_dict()
+            return response
+        except ValueError as exc:
+            response["status"] = "normalization_failed"
+            response["error"] = str(exc)
+            response["error_code"] = "normalization_failed"
+            response["error_message"] = str(exc)
+            response["warnings"].append(
+                f"normalization_failed:{provider_code}:repair_attempt_exhausted"
+            )
+            return response
 
-        return {
-            "round": round_number,
-            "independent": independent,
-            "input_hash": input_hash,
-            "responses": responses,
-        }
+    def _resolve_provider_execution_mode(
+        self,
+        provider_code: str,
+        requested_execution_mode: str,
+    ) -> str:
+        if requested_execution_mode in {"mock", "real"}:
+            return requested_execution_mode
+        return "real" if self.runtime.can_execute_real(provider_code) else "mock"
 
     def _mock_normalized_opinion(
         self,
@@ -398,6 +566,11 @@ class MultiAIConsiliumService:
                     branch_index["inflammatory"],
                 ],
                 leading_hypothesis_ids=[branch_index["mechanical_internal"]["id"]],
+                supported_branch_ids=[
+                    branch_index["mechanical_internal"]["id"],
+                    branch_index["degenerative"]["id"],
+                    branch_index["inflammatory"]["id"],
+                ],
                 safety_critical_hypothesis_ids=[branch_index["inflammatory"]["id"]],
                 missing_evidence_ids=[
                     "missing:joint_line_exam",
@@ -426,6 +599,11 @@ class MultiAIConsiliumService:
                     branch_index["vascular"],
                 ],
                 leading_hypothesis_ids=[branch_index["mechanical_internal"]["id"]],
+                supported_branch_ids=[
+                    branch_index["mechanical_internal"]["id"],
+                    branch_index["inflammatory"]["id"],
+                    branch_index["vascular"]["id"],
+                ],
                 safety_critical_hypothesis_ids=[
                     branch_index["inflammatory"]["id"],
                     branch_index["vascular"]["id"],
@@ -456,6 +634,12 @@ class MultiAIConsiliumService:
                     provider_candidate,
                 ],
                 leading_hypothesis_ids=[branch_index["mechanical_internal"]["id"]],
+                supported_branch_ids=[
+                    branch_index["mechanical_internal"]["id"],
+                    branch_index["referred_pain"]["id"],
+                    branch_index["infectious"]["id"],
+                ],
+                proposed_branches=[provider_candidate],
                 safety_critical_hypothesis_ids=[
                     branch_index["infectious"]["id"],
                     provider_candidate["id"],
@@ -493,6 +677,12 @@ class MultiAIConsiliumService:
                     branch_index["vascular"],
                 ],
                 leading_hypothesis_ids=[branch_index["mechanical_internal"]["id"]],
+                supported_branch_ids=[
+                    branch_index["mechanical_internal"]["id"],
+                    branch_index["degenerative"]["id"],
+                    branch_index["inflammatory"]["id"],
+                    branch_index["vascular"]["id"],
+                ],
                 safety_critical_hypothesis_ids=[
                     branch_index["inflammatory"]["id"],
                     branch_index["vascular"]["id"],
@@ -519,6 +709,12 @@ class MultiAIConsiliumService:
                     branch_index["infectious"],
                 ],
                 leading_hypothesis_ids=[branch_index["mechanical_internal"]["id"]],
+                supported_branch_ids=[
+                    branch_index["mechanical_internal"]["id"],
+                    branch_index["inflammatory"]["id"],
+                    branch_index["vascular"]["id"],
+                    branch_index["infectious"]["id"],
+                ],
                 safety_critical_hypothesis_ids=[
                     branch_index["inflammatory"]["id"],
                     branch_index["vascular"]["id"],
@@ -547,6 +743,13 @@ class MultiAIConsiliumService:
                     provider_candidate,
                 ],
                 leading_hypothesis_ids=[branch_index["mechanical_internal"]["id"]],
+                supported_branch_ids=[
+                    branch_index["mechanical_internal"]["id"],
+                    branch_index["referred_pain"]["id"],
+                    branch_index["infectious"]["id"],
+                    branch_index["inflammatory"]["id"],
+                ],
+                proposed_branches=[provider_candidate],
                 safety_critical_hypothesis_ids=[
                     branch_index["infectious"]["id"],
                     branch_index["inflammatory"]["id"],
@@ -567,6 +770,137 @@ class MultiAIConsiliumService:
             ),
         }
         return round_two[provider_code]
+
+    def _normalize_real_response(
+        self,
+        *,
+        provider_code: str,
+        content: str,
+        clinical_graph: dict,
+    ) -> NormalizedClinicalOpinion:
+        parsed = self._parse_structured_response(content)
+        branch_lookup = {
+            branch["id"]: branch
+            for branch in clinical_graph["branches"]
+        }
+        hypotheses: list[dict] = []
+        seen_ids: set[str] = set()
+
+        for branch_id in parsed.get("supported_branch_ids", []) + parsed.get("challenged_branch_ids", []):
+            branch = branch_lookup.get(branch_id)
+            if branch and branch_id not in seen_ids:
+                hypotheses.append(branch)
+                seen_ids.add(branch_id)
+
+        for item in parsed.get("hypotheses", []):
+            if isinstance(item, str):
+                branch = branch_lookup.get(item)
+                if branch and item not in seen_ids:
+                    hypotheses.append(branch)
+                    seen_ids.add(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            branch_id = item.get("id")
+            if branch_id in branch_lookup and branch_id not in seen_ids:
+                hypotheses.append(branch_lookup[branch_id])
+                seen_ids.add(branch_id)
+            elif branch_id and branch_id not in seen_ids:
+                provider_branch = self._provider_branch_from_payload(
+                    provider_code=provider_code,
+                    payload=item,
+                )
+                hypotheses.append(provider_branch)
+                seen_ids.add(provider_branch["id"])
+
+        proposed_branches = [
+            self._provider_branch_from_payload(provider_code=provider_code, payload=item)
+            for item in parsed.get("proposed_branches", [])
+            if isinstance(item, dict)
+        ]
+        for proposed in proposed_branches:
+            if proposed["id"] not in seen_ids:
+                hypotheses.append(proposed)
+                seen_ids.add(proposed["id"])
+
+        safety_ids = list(parsed.get("safety_critical_branch_ids", []))
+        safety_ids.extend(
+            branch["id"]
+            for branch in proposed_branches
+            if branch.get("safety_critical")
+        )
+        leading_hypothesis_ids = [
+            branch_id
+            for branch_id in parsed.get("supported_branch_ids", [])
+            if branch_id in branch_lookup
+        ][:1]
+        if not leading_hypothesis_ids and hypotheses:
+            leading_hypothesis_ids = [hypotheses[0]["id"]]
+
+        return NormalizedClinicalOpinion(
+            provider_code=provider_code,
+            hypotheses=hypotheses,
+            leading_hypothesis_ids=leading_hypothesis_ids,
+            supported_branch_ids=list(parsed.get("supported_branch_ids", [])),
+            challenged_branch_ids=list(parsed.get("challenged_branch_ids", [])),
+            proposed_branches=proposed_branches,
+            minority_opinions=list(parsed.get("minority_opinions", [])),
+            safety_critical_hypothesis_ids=sorted(set(safety_ids)),
+            missing_evidence_ids=list(parsed.get("missing_evidence_ids", [])),
+            recommended_checks=list(parsed.get("recommended_checks", [])),
+            prohibited_conclusions=list(parsed.get("prohibited_conclusions", [])),
+            limitations=list(parsed.get("limitations", [])),
+            confidence_statement=str(parsed.get("confidence_statement", "")),
+            is_mock=False,
+        )
+
+    @staticmethod
+    def _parse_structured_response(content: str) -> dict:
+        candidates = [content, MultiAIConsiliumService._repair_json_payload(content)]
+        for candidate in candidates:
+            if not candidate:
+                continue
+            try:
+                parsed = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        raise ValueError("normalization_failed")
+
+    @staticmethod
+    def _repair_json_payload(content: str) -> str:
+        cleaned = content.strip()
+        if cleaned.startswith("```"):
+            lines = [line for line in cleaned.splitlines() if not line.startswith("```")]
+            cleaned = "\n".join(lines).strip()
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            cleaned = cleaned[start:end + 1]
+        return cleaned
+
+    @staticmethod
+    def _provider_branch_from_payload(provider_code: str, payload: dict) -> dict:
+        branch_id = payload.get("id") or payload.get("branch_id") or payload.get("causal_domain") or "provider_branch"
+        if ":provider:" not in branch_id:
+            branch_id = f"provider:{provider_code}:{branch_id}"
+        return {
+            "id": branch_id,
+            "title": payload.get("title", branch_id),
+            "description": payload.get("description", "Provider-proposed branch"),
+            "causal_domain": payload.get("causal_domain", branch_id.rsplit(":", maxsplit=1)[-1]),
+            "branch_type": payload.get("branch_type", "provider_candidate"),
+            "supporting_fact_ids": payload.get("supporting_fact_ids", []),
+            "contradicting_fact_ids": payload.get("contradicting_fact_ids", []),
+            "missing_evidence_ids": payload.get("missing_evidence_ids", []),
+            "evidence_strength": payload.get("evidence_strength", "plausible"),
+            "confidence": payload.get("confidence", 0.35),
+            "status": payload.get("status", "proposed"),
+            "safety_critical": payload.get("safety_critical", False),
+            "source": "provider",
+            "requires_validation": True,
+        }
 
     def _build_comparison(
         self,
@@ -686,16 +1020,20 @@ class MultiAIConsiliumService:
     def _build_consensus(
         self,
         *,
-        data: MultiAIConsiliumRequest,
         clinical_graph: dict,
         participant_results: list[dict],
         comparison: dict,
+        consensus_mode: str,
+        minimum_successful_providers: int,
+        requested_provider_count: int,
     ) -> dict:
         successful = [
             result for result in participant_results
             if result["status"] == "completed" and result["normalized_response"] is not None
         ]
-        if self._is_insufficient_participants(data, participant_results):
+        if len(successful) < 2 or len(successful) < minimum_successful_providers:
+            consensus_status = "insufficient_participants"
+        elif consensus_mode == "strict" and len(successful) < requested_provider_count:
             consensus_status = "insufficient_participants"
         elif not comparison["agreements"]["leading_hypothesis_ids"]:
             consensus_status = "no_consensus"
@@ -709,7 +1047,7 @@ class MultiAIConsiliumService:
             consensus_status = "consensus"
 
         branch_lookup = {
-            branch["id"]: self._branch_from_snapshot(data.case_id, branch)
+            branch["id"]: self._branch_from_snapshot(branch)
             for branch in clinical_graph["branches"]
         }
         roles = [
@@ -763,9 +1101,29 @@ class MultiAIConsiliumService:
                         ],
                     )
                 )
+            for challenged_branch_id in normalized.get("challenged_branch_ids", []):
+                branch = branch_lookup.get(challenged_branch_id)
+                if branch is None:
+                    continue
+                reviews.append(
+                    BranchReview(
+                        role_code=result["provider_code"],
+                        branch_id=challenged_branch_id,
+                        position=ReviewPosition.WEAKENS,
+                        rationale=f"{result['provider_code']} challenged this branch in round {result['round']}",
+                        confidence=0.55,
+                        provenance=[
+                            ProvenanceReference(
+                                source_id=f"multi_ai:{result['provider_code']}",
+                                source_version=NORMALIZATION_SCHEMA_VERSION,
+                                locator=f"round:{result['round']}:challenged",
+                            )
+                        ],
+                    )
+                )
 
         dynamic = self.consilium_service.evaluate(
-            data.case_id,
+            clinical_graph["clinical_graph_version"],
             list(branch_lookup.values()),
             roles,
             reviews,
@@ -773,11 +1131,11 @@ class MultiAIConsiliumService:
         )
         summary = dynamic.consensus.summary
         if consensus_status == "insufficient_participants":
-            summary = "Mock multi-AI orchestration did not reach the minimum participant threshold."
+            summary = "Multi-provider orchestration did not reach the minimum participant threshold."
         elif consensus_status == "partial_consensus":
-            summary = "Mock multi-AI orchestration reached partial consensus: the leading branch converges, while safety and minority differences remain visible."
+            summary = "Partial consensus reached: the leading branch converges, while safety or minority differences remain visible."
         elif consensus_status == "no_consensus":
-            summary = "Mock multi-AI orchestration found no consensus on a leading branch; alternatives remain visible."
+            summary = "No consensus on a leading branch; alternatives remain visible."
 
         return {
             "retained_branch_ids": dynamic.consensus.retained_branch_ids,
@@ -805,15 +1163,16 @@ class MultiAIConsiliumService:
     def _build_devil_review(
         self,
         *,
-        data: MultiAIConsiliumRequest,
-        clinical_graph: dict,
+        requested_provider_codes: list[str],
+        rounds: list[dict],
         comparison: dict,
         consensus: dict,
-        rounds: list[dict],
+        execution_mode: str,
+        provider_execution_status: str,
     ) -> dict:
         round_one = rounds[0]
         round_one_providers = [item["provider_code"] for item in round_one["responses"]]
-        missing_provider_codes = sorted(set(data.provider_codes) - set(round_one_providers))
+        missing_provider_codes = sorted(set(requested_provider_codes) - set(round_one_providers))
         fallback_providers = [
             item["provider_code"]
             for item in round_one["responses"]
@@ -830,8 +1189,7 @@ class MultiAIConsiliumService:
         checks = {
             "all_claimed_providers_recorded": not missing_provider_codes,
             "no_hidden_fallback": not fallback_providers,
-            "mock_mode_honestly_labeled": EXECUTION_MODE == "mock" and not REAL_PROVIDER_CALLS,
-            "real_provider_calls_disabled": REAL_PROVIDER_CALLS is False,
+            "mock_mode_honestly_labeled": not (execution_mode == "mock" and provider_execution_status != "mock_only"),
             "round_one_input_hash_consistent": len({
                 item["input_hash"] for item in round_one["responses"]
             }) == 1,
@@ -923,7 +1281,6 @@ class MultiAIConsiliumService:
         self,
         *,
         run_id: str,
-        data: MultiAIConsiliumRequest,
         case_package: dict,
         payload: dict,
     ) -> None:
@@ -931,20 +1288,12 @@ class MultiAIConsiliumService:
         run = self.uow.repo(MultiAIConsiliumRunORM).add(
             MultiAIConsiliumRunORM(
                 run_id=run_id,
-                case_id=data.case_id,
-                mode=data.mode,
+                case_id=payload["case_id"],
+                mode=self._consensus_mode_from_payload(payload),
                 execution_mode=payload["execution_mode"],
-                requested_provider_codes=data.provider_codes,
-                successful_provider_codes=[
-                    participant["provider_code"]
-                    for participant in payload["participants"]
-                    if participant["status"] == "completed"
-                ],
-                failed_provider_codes=[
-                    participant["provider_code"]
-                    for participant in payload["participants"]
-                    if participant["status"] != "completed"
-                ],
+                requested_provider_codes=payload["requested_providers"],
+                successful_provider_codes=payload["successful_providers"],
+                failed_provider_codes=payload["failed_providers"],
                 case_package=case_package,
                 clinical_graph_snapshot=payload["clinical_graph"],
                 comparison_snapshot=payload["comparison"],
@@ -954,11 +1303,16 @@ class MultiAIConsiliumService:
                 limitations=payload["limitations"],
                 violations=payload["violations"],
                 clinical_graph_version=payload["clinical_graph"]["clinical_graph_version"],
-                prompt_version=PROMPT_VERSION,
+                prompt_version=SYSTEM_PROMPT_VERSION,
                 normalization_schema_version=NORMALIZATION_SCHEMA_VERSION,
                 comparison_algorithm_version=COMPARISON_ALGORITHM_VERSION,
                 consensus_algorithm_version=CONSENSUS_ALGORITHM_VERSION,
                 round_one_input_hash=round_one["input_hash"],
+                system_prompt_version=SYSTEM_PROMPT_VERSION,
+                round_one_prompt_version=ROUND_ONE_PROMPT_VERSION,
+                round_two_prompt_version=ROUND_TWO_PROMPT_VERSION,
+                devil_prompt_version=DEVIL_PROMPT_VERSION,
+                case_package_hash=case_package["case_package_hash"],
             )
         )
         self.uow.session.flush()
@@ -969,32 +1323,53 @@ class MultiAIConsiliumService:
                     MultiAIConsiliumParticipantORM(
                         run_id=run.id,
                         provider_code=response["provider_code"],
+                        provider_model=response["provider_model"],
+                        execution_mode=response["execution_mode"],
                         round_number=round_payload["round"],
                         independent=response["independent"],
                         prompt_version=response["prompt_version"],
                         input_hash=response["input_hash"],
-                        model=response["model"],
+                        prompt_hash=response["prompt_hash"],
+                        model=response["provider_model"],
                         status=response["status"],
                         started_at=self._parse_datetime(response["started_at"]),
                         completed_at=self._parse_datetime(response["completed_at"]),
                         latency_ms=response["latency_ms"],
                         raw_response=response["raw_response"],
                         normalized_response=response["normalized_response"],
-                        error=response["error"],
+                        error=response["error_message"],
+                        error_code=response["error_code"],
+                        error_message=response["error_message"],
                         fallback_used=response["fallback_used"],
                         is_mock=response["is_mock"],
+                        real_provider_call=response["real_provider_call"],
+                        attempt_count=response["attempt_count"],
+                        usage=response["usage"],
                     )
                 )
         self.uow.commit()
 
     @staticmethod
-    def _system_prompt() -> str:
-        return (
+    def _consensus_mode_from_payload(payload: dict) -> str:
+        status = payload["consensus"]["consensus_status"]
+        return "strict" if status == "insufficient_participants" else "demo"
+
+    @staticmethod
+    def _system_prompt(round_number: int) -> str:
+        base_prompt = (
+            "You are participating in a structured clinical multi-provider review. "
             "This is not a final diagnosis. Do not hide alternative branches. "
             "Do not close safety-critical branches without sufficient data. "
-            "Do not invent sources. Do not treat consensus as proof of causality. "
-            "Return a structured response."
+            "Do not invent sources. Do not convert consensus into proof of causality. "
+            "Return valid JSON only with this structure: "
+            "{\"hypotheses\": [], \"supported_branch_ids\": [], \"challenged_branch_ids\": [], "
+            "\"proposed_branches\": [], \"safety_critical_branch_ids\": [], \"missing_evidence_ids\": [], "
+            "\"recommended_checks\": [], \"minority_opinions\": [], \"prohibited_conclusions\": [], "
+            "\"limitations\": [], \"confidence_statement\": \"\"}."
         )
+        if round_number == 1:
+            return base_prompt + " Round 1 is independent: analyze all visible branches yourself."
+        return base_prompt + " Round 2 may consider structured disagreement and unresolved safety issues from round 1."
 
     @staticmethod
     def _serialize_branch(branch: HypothesisBranch) -> dict:
@@ -1042,12 +1417,12 @@ class MultiAIConsiliumService:
         }
 
     @staticmethod
-    def _branch_from_snapshot(case_id: str, branch: dict) -> HypothesisBranch:
+    def _branch_from_snapshot(branch: dict) -> HypothesisBranch:
         missing = branch.get("missing_evidence_ids", [])
         supporting = branch.get("supporting_fact_ids", [])
         return HypothesisBranch(
             id=branch["id"],
-            case_id=case_id,
+            case_id=branch["id"].split(":")[0] if ":" in branch["id"] else "CASE",
             title=branch["title"],
             description=branch["description"],
             root_trigger_ids=supporting[:1] or ["fact:case"],
@@ -1080,12 +1455,13 @@ class MultiAIConsiliumService:
 
     @staticmethod
     def _hash_payload(payload: dict) -> str:
-        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        return MultiAIConsiliumService._hash_text(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        )
 
     @staticmethod
-    def _latency_ms(started_at: datetime, completed_at: datetime) -> int:
-        return int((completed_at - started_at).total_seconds() * 1000)
+    def _hash_text(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _successful_count(participant_results: list[dict]) -> int:
@@ -1096,17 +1472,16 @@ class MultiAIConsiliumService:
         )
 
     @staticmethod
-    def _parse_datetime(value: str) -> datetime:
-        return datetime.fromisoformat(value)
+    def _provider_execution_status(participant_results: list[dict]) -> str:
+        execution_modes = {result["execution_mode"] for result in participant_results}
+        if execution_modes == {"mock"}:
+            return "mock_only"
+        if execution_modes == {"real"}:
+            return "real_only"
+        return "mixed"
 
-    def _is_insufficient_participants(
-        self,
-        data: MultiAIConsiliumRequest,
-        participant_results: list[dict],
-    ) -> bool:
-        successful = self._successful_count(participant_results)
-        if successful < 2:
-            return True
-        if data.mode == "strict" and successful < len(data.provider_codes):
-            return True
-        return successful < data.minimum_successful_providers
+    @staticmethod
+    def _parse_datetime(value: str | None) -> datetime:
+        if not value:
+            return datetime.now(timezone.utc)
+        return datetime.fromisoformat(value)

@@ -27,6 +27,7 @@ def ai_os_status():
         "version": "0.4",
         "status": "running",
         "memory": "Clinical Working Memory",
+        "providers": ai_runtime.provider_status(),
     }
 
 
@@ -44,16 +45,18 @@ def process_request(request: str):
     }
 
 
-async def runtime_test_request(provider: str = "auto") -> dict:
+async def runtime_test_request(provider: str = "auto", execution_mode: str = "mock") -> dict:
     response = await ai_runtime.execute(
         provider=provider,
         system_prompt="FHOS AI Runtime health check",
         user_prompt="Return placeholder response",
         temperature=0.2,
+        execution_mode=execution_mode,
     )
     return {
         "status": "ok",
         "provider": response["provider"],
         "runtime": "working",
+        "execution_mode": execution_mode,
         "response": response,
     }

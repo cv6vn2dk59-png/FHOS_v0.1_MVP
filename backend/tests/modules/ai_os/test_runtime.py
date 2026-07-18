@@ -33,11 +33,11 @@ def test_runtime_execute_uses_requested_provider():
         )
     )
 
-    assert result == {
-        "provider": "gemini",
-        "model": "placeholder",
-        "content": "Gemini placeholder",
-    }
+    assert result["provider"] == "gemini"
+    assert result["model"] == "placeholder"
+    assert result["content"] == "Gemini placeholder"
+    assert result["is_mock"] is True
+    assert result["real_provider_call"] is False
 
 
 def test_runtime_test_request_returns_working_payload():
