@@ -65,7 +65,8 @@ jobs:
         run: alembic upgrade head
 
       - name: Import backend app smoke test
-        run: python -c "from app.main import app; print({'title': app.title, 'version': app.version})"
+        run: |
+          python -c "from app.main import app; print({'title': app.title, 'version': app.version})"
 
       - name: Run backend test suite
         run: python -m pytest
